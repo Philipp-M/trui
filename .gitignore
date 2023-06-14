@@ -1,0 +1,6 @@
+/target
+log
+perf*
+flamegraph.svg
+src/main.rs
+examples/experiments.rs
