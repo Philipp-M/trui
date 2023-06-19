@@ -1,4 +1,4 @@
-use super::{core::PaintCx, ChangeFlags, Event, EventCx, LayoutCx, Pod, Widget};
+use super::{core::PaintCx, ChangeFlags, Event, EventCx, LayoutCx, Pod, StyleableWidget, Widget};
 use crate::view::Borders;
 use ratatui::{layout::Rect, style::Style, symbols};
 use taffy::tree::NodeId;
@@ -62,30 +62,67 @@ pub struct Border {
     pub(crate) content: Pod,
     borders: Borders,
     border_style: Style,
+    inherit_style: bool,
 }
 
 impl Border {
-    pub fn new(content: impl Widget + 'static, borders: Borders, border_style: Style) -> Self {
+    pub fn new(
+        content: impl Widget + 'static,
+        borders: Borders,
+        border_style: Style,
+        inherit_style: bool,
+    ) -> Self {
         Border {
             content: Pod::new(content),
             borders,
             border_style,
+            inherit_style,
         }
     }
 
     pub fn set_borders(&mut self, borders: Borders) -> ChangeFlags {
-        self.borders = borders;
-        ChangeFlags::LAYOUT | ChangeFlags::PAINT
+        if self.borders != borders {
+            self.borders = borders;
+            ChangeFlags::LAYOUT | ChangeFlags::PAINT
+        } else {
+            ChangeFlags::empty()
+        }
     }
-    pub fn set_border_style(&mut self, style: Style) -> ChangeFlags {
-        self.border_style = style;
-        ChangeFlags::PAINT
+
+    pub fn set_inherit_style(&mut self, inherit: bool) -> ChangeFlags {
+        if self.inherit_style != inherit {
+            self.inherit_style = inherit;
+            ChangeFlags::LAYOUT | ChangeFlags::PAINT
+        } else {
+            ChangeFlags::empty()
+        }
+    }
+}
+
+impl StyleableWidget for Border {
+    fn set_style(&mut self, style: Style) -> bool {
+        let changed = style != self.border_style;
+        if changed {
+            self.border_style = style;
+        }
+        changed
     }
 }
 
 impl Widget for Border {
     fn paint(&mut self, cx: &mut PaintCx, rect: Rect) {
-        render_border(cx, rect, self.borders, self.border_style);
+        let style = match cx.override_style {
+            Some(style) => style,
+            None => self.border_style,
+        };
+
+        cx.override_style = if self.inherit_style {
+            Some(style)
+        } else {
+            None
+        };
+
+        render_border(cx, rect, self.borders, style);
         self.content.paint(cx)
     }
 

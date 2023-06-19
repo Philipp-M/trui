@@ -44,6 +44,9 @@ pub struct PaintCx<'a, 'b> {
     pub(crate) cx_state: &'a mut CxState<'b>,
     pub(crate) widget_state: &'a WidgetState,
     pub(crate) terminal: &'a mut Terminal<CrosstermBackend<Stdout>>,
+    // TODO this kinda feels hacky, find a better solution for this issue:
+    // this is currently necessary because the most outer styleable widget should be able to override the style for a styleable widget
+    pub(crate) override_style: Option<ratatui::style::Style>,
 }
 
 #[allow(dead_code)]
@@ -349,9 +352,11 @@ impl Pod {
 pub trait Widget {
     fn paint(&mut self, cx: &mut PaintCx, rect: Rect);
 
+    // TODO style naming kinda clashes with the Textual style (fg, bg color and modifiers..)
     fn style(&mut self, cx: &mut StyleCx, prev: NodeId) -> NodeId;
 
     // TODO should layout uses global coordinates or only relative to the parent?
+    // TODO should this be done in the "paint job"
     fn layout(&mut self, cx: &mut LayoutCx, rect: Rect);
 
     fn event(&mut self, cx: &mut EventCx, event: &Event);
@@ -395,4 +400,9 @@ impl Widget for Box<dyn AnyWidget> {
     fn layout(&mut self, cx: &mut LayoutCx, rect: Rect) {
         self.deref_mut().layout(cx, rect)
     }
+}
+
+pub trait StyleableWidget {
+    /// returns true, if it needs a repaint after setting the style (most of the time: style of the widget has changed)
+    fn set_style(&mut self, style: ratatui::style::Style) -> bool;
 }

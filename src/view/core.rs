@@ -50,11 +50,11 @@ impl Cx {
 }
 
 // TODO put this into the "xilem_core::generate_anyview_trait!" macro?
-pub trait Boxed<T, A> {
+pub trait BoxedView<T, A = ()> {
     fn boxed(self) -> Box<dyn AnyView<T, A>>;
 }
 
-impl<T, A, V> Boxed<T, A> for V
+impl<T, A, V> BoxedView<T, A> for V
 where
     V: View<T, A> + 'static,
     V::State: 'static,

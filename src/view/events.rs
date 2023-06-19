@@ -1,12 +1,12 @@
 use super::{Cx, Styleable, View, ViewMarker};
-use crate::widget::{self, ChangeFlags};
+use crate::widget::{self, ChangeFlags, StyleableWidget};
 use ratatui::style::Style;
 use std::marker::PhantomData;
 use xilem_core::Id;
 
 pub trait Hoverable<T, A, V, C: Fn(&mut T) -> A + Send> {
     fn on_hover(self, callback: C) -> OnHover<T, A, V, C>;
-    fn on_hover_lost(self, callback: C) -> OnHoverLost<T, A, V, C>;
+    fn on_blur_hover(self, callback: C) -> OnHoverLost<T, A, V, C>;
 }
 
 impl<T, A, V, C> Hoverable<T, A, V, C> for V
@@ -22,7 +22,7 @@ where
         }
     }
 
-    fn on_hover_lost(self, callback: C) -> OnHoverLost<T, A, V, C> {
+    fn on_blur_hover(self, callback: C) -> OnHoverLost<T, A, V, C> {
         OnHoverLost {
             view: self,
             callback,
@@ -46,6 +46,120 @@ where
             callback,
             phantom: PhantomData,
         }
+    }
+}
+
+pub struct StyleOnHover<T, A, V> {
+    view: V,
+    style: Style,
+    phantom: PhantomData<fn() -> (T, A)>,
+}
+
+pub trait HoverStyleable<T, A, V: View<T, A>> {
+    fn on_hover_style(self, style: Style) -> StyleOnHover<T, A, V>;
+}
+
+impl<T, A, VS, V> HoverStyleable<T, A, V> for V
+where
+    VS: View<T, A>,
+    V: View<T, A> + Styleable<T, A, Output = VS>,
+{
+    fn on_hover_style(self, style: Style) -> StyleOnHover<T, A, V> {
+        StyleOnHover {
+            view: self,
+            style,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<T, A, V> ViewMarker for StyleOnHover<T, A, V> {}
+
+// TODO is "invisible" (i.e. without id) a good idea,
+// it never should receive events (or other things) directly and is just a trait on top of any *actual* view?
+impl<T, A, VS, V> View<T, A> for StyleOnHover<T, A, V>
+where
+    VS: View<T, A>,
+    V::Element: StyleableWidget,
+    V: View<T, A> + Styleable<T, A, Output = VS>,
+{
+    type State = V::State;
+
+    type Element = widget::StyleOnHover<V::Element>;
+
+    fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
+        let (id, state, element) = self.view.build(cx);
+        let element = widget::StyleOnHover::new(element, self.style);
+        (id, state, element)
+    }
+
+    fn rebuild(
+        &self,
+        cx: &mut Cx,
+        prev: &Self,
+        id: &mut xilem_core::Id,
+        state: &mut Self::State,
+        element: &mut Self::Element,
+    ) -> ChangeFlags {
+        self.view
+            .rebuild(cx, &prev.view, id, state, &mut element.element)
+    }
+
+    fn message(
+        &self,
+        id_path: &[xilem_core::Id],
+        state: &mut Self::State,
+        message: Box<dyn std::any::Any>,
+        app_state: &mut T,
+    ) -> xilem_core::MessageResult<A> {
+        self.view.message(id_path, state, message, app_state)
+    }
+}
+
+// TODO I'm not sure if it should be further possible to style this (compile times, ambiguous behavior etc.)
+impl<T, A, V> Styleable<T, A> for StyleOnHover<T, A, V>
+where
+    V: View<T, A> + Styleable<T, A>,
+    V::Output: Styleable<T, A>,
+    // <V as Styleable<T, A>>::Output: Styleable<T, A>,
+    <<V as Styleable<T, A>>::Output as View<T, A>>::Element: StyleableWidget,
+{
+    type Output = StyleOnHover<T, A, <V as Styleable<T, A>>::Output>;
+
+    fn fg(self, color: ratatui::style::Color) -> Self::Output {
+        StyleOnHover {
+            view: self.view.fg(color),
+            style: self.style,
+            phantom: PhantomData,
+        }
+    }
+
+    fn bg(self, color: ratatui::style::Color) -> Self::Output {
+        StyleOnHover {
+            view: self.view.bg(color),
+            style: self.style,
+            phantom: PhantomData,
+        }
+    }
+
+    fn modifier(self, modifier: ratatui::style::Modifier) -> Self::Output {
+        StyleOnHover {
+            view: self.view.modifier(modifier),
+            style: self.style,
+            phantom: PhantomData,
+        }
+    }
+
+    fn style(self, style: ratatui::style::Style) -> Self::Output {
+        StyleOnHover {
+            view: self.view.style(style),
+            style: self.style,
+            phantom: PhantomData,
+        }
+    }
+
+    fn current_style(&self) -> Style {
+        self.view.current_style()
     }
 }
 

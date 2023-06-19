@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::widget::{self, ChangeFlags};
+use crate::widget::{self, ChangeFlags, StyleableWidget};
 
 use super::{Borders, Cx, Styleable, View, ViewMarker};
 use ratatui::style::{Color, Style};
@@ -11,6 +11,7 @@ pub struct Border<T, A, V> {
     borders: Borders,
     phantom: PhantomData<fn() -> (T, A)>,
     border_style: Style,
+    inherit_style: bool,
 }
 
 impl<T, A, V> ViewMarker for Border<T, A, V> {}
@@ -29,7 +30,7 @@ where
             let (child_id, state, element) = self.content.build(cx);
             (
                 (state, child_id),
-                widget::Border::new(element, self.borders, self.border_style),
+                widget::Border::new(element, self.borders, self.border_style, self.inherit_style),
             )
         });
         (id, state, element)
@@ -43,18 +44,18 @@ where
         (state, child_id): &mut Self::State,
         element: &mut Self::Element,
     ) -> crate::widget::ChangeFlags {
-        // could be a little bit less redundant...
         let mut changeflags = ChangeFlags::empty();
-        if prev.borders != self.borders {
-            changeflags |= element.set_borders(self.borders);
+        changeflags |= element.set_borders(self.borders);
+        if element.set_style(self.border_style) {
+            changeflags |= ChangeFlags::PAINT;
         }
-        if prev.border_style != self.border_style {
-            changeflags |= element.set_border_style(self.border_style);
-        }
+        changeflags |= element.set_inherit_style(self.inherit_style);
+
         let element = element
             .content
             .downcast_mut()
             .expect("The border content widget changed its type, this should never happen!");
+
         changeflags
             | cx.with_id(*id, |cx| {
                 self.content
@@ -113,11 +114,19 @@ where
     }
 }
 
+impl<T, A, V> Border<T, A, V> {
+    pub fn inherit_style(mut self, inherit: bool) -> Self {
+        self.inherit_style = inherit;
+        self
+    }
+}
+
 pub fn border<T, A, V>(content: V) -> Border<T, A, V> {
     Border {
         content,
         borders: Borders::ALL,
         phantom: PhantomData,
         border_style: Style::reset(),
+        inherit_style: false,
     }
 }

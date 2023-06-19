@@ -1,10 +1,10 @@
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use ratatui::layout::Rect;
+use ratatui::{layout::Rect, style::Style};
 use taffy::tree::NodeId;
 use xilem_core::Message;
 
 use super::{
-    core::{IdPath, PaintCx},
+    core::{IdPath, PaintCx, StyleableWidget},
     Event, EventCx, LayoutCx, StyleCx, Widget,
 };
 
@@ -92,6 +92,8 @@ impl<E: Widget> Widget for OnHover<E> {
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
+        // TODO catch/consume event?
+        self.element.event(cx, event);
         if matches!(event, Event::Mouse(_)) {
             if cx.is_hot() && !self.is_hovering {
                 self.is_hovering = true;
@@ -100,8 +102,6 @@ impl<E: Widget> Widget for OnHover<E> {
                 self.is_hovering = false;
             }
         }
-        // TODO catch/consume event?
-        self.element.event(cx, event)
     }
 }
 
@@ -135,6 +135,7 @@ impl<E: Widget> Widget for OnHoverLost<E> {
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
+        self.element.event(cx, event);
         if matches!(event, Event::Mouse(_)) {
             if cx.is_hot() && !self.is_hovering {
                 self.is_hovering = true;
@@ -143,6 +144,57 @@ impl<E: Widget> Widget for OnHoverLost<E> {
                 cx.add_message(Message::new(self.id_path.clone(), ()));
             }
         }
+    }
+}
+
+pub struct StyleOnHover<E> {
+    pub element: E,
+    is_hovering: bool,
+    style: Style,
+}
+
+impl<E> StyleOnHover<E> {
+    pub fn new(element: E, style: Style) -> Self {
+        StyleOnHover {
+            element,
+            is_hovering: false,
+            style,
+        }
+    }
+}
+
+impl<E: Widget + StyleableWidget> StyleableWidget for StyleOnHover<E> {
+    fn set_style(&mut self, style: ratatui::style::Style) -> bool {
+        self.element.set_style(style)
+    }
+}
+
+impl<E: Widget + StyleableWidget> Widget for StyleOnHover<E> {
+    fn paint(&mut self, cx: &mut PaintCx, rect: Rect) {
+        if cx.override_style.is_none() {
+            if self.is_hovering {
+                cx.override_style = Some(self.style);
+            };
+            self.element.paint(cx, rect);
+            cx.override_style = None;
+        } else {
+            self.element.paint(cx, rect);
+        }
+    }
+
+    fn style(&mut self, cx: &mut StyleCx, prev: NodeId) -> NodeId {
+        self.element.style(cx, prev)
+    }
+
+    fn layout(&mut self, cx: &mut LayoutCx, rect: Rect) {
+        self.element.layout(cx, rect)
+    }
+
+    fn event(&mut self, cx: &mut EventCx, event: &Event) {
+        if matches!(event, Event::Mouse(_)) {
+            self.is_hovering = cx.is_hot();
+        }
+        // TODO catch/consume event?
         self.element.event(cx, event)
     }
 }

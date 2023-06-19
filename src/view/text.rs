@@ -1,5 +1,5 @@
 use super::{common::Styleable, Cx, View, ViewMarker};
-use crate::widget::{self, ChangeFlags};
+use crate::widget::{self, ChangeFlags, StyleableWidget};
 use ratatui::style::{Color, Modifier, Style};
 use std::marker::PhantomData;
 
@@ -38,10 +38,10 @@ impl<T, A> View<T, A> for &str {
         &self,
         _id_path: &[xilem_core::Id],
         _state: &mut Self::State,
-        _message: Box<dyn std::any::Any>,
+        message: Box<dyn std::any::Any>,
         _app_state: &mut T,
     ) -> xilem_core::MessageResult<A> {
-        xilem_core::MessageResult::Nop
+        xilem_core::MessageResult::Stale(message)
     }
 }
 
@@ -134,8 +134,8 @@ impl<T, A> View<T, A> for Text<T, A> {
         if prev.text != self.text {
             changeflags |= element.set_text(self.text.clone());
         }
-        if prev.style != self.style {
-            changeflags |= element.set_style(self.style);
+        if element.set_style(self.style) {
+            changeflags |= ChangeFlags::PAINT;
         }
         changeflags
     }

@@ -119,6 +119,7 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
             widget_state: &mut self.root_state,
             cx_state,
             terminal: &mut self.terminal,
+            override_style: None,
         };
 
         root_pod.paint(&mut paint_cx);

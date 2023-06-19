@@ -1,7 +1,7 @@
 use anyhow::Result;
 use ratatui::style::Color;
 use trui::{
-    border, v_stack, AnyView, App, Boxed, Clickable, Hoverable, Styleable, View, ViewMarker,
+    border, v_stack, AnyView, App, BoxedView, Clickable, Hoverable, Styleable, View, ViewMarker,
 };
 
 // TODO this basic logic (hover, styling etc.) should probably be its own widget (state)...
@@ -16,7 +16,7 @@ pub fn button<T>(
         .fg(border_color)
         .on_click(click_cb)
         .on_hover(hover_cb)
-        .on_hover_lost(hover_lost_cb)
+        .on_blur_hover(hover_lost_cb)
 }
 
 // Thanks ChatGPT...
@@ -38,13 +38,13 @@ fn rainbow(normalized_value: f32) -> Color {
 }
 
 pub fn rainbow_borders<T: 'static>(
-    content: Box<dyn AnyView<T>>,
+    content: impl BoxedView<T>,
     count: usize,
 ) -> Box<dyn AnyView<T>> {
-    let mut view: Box<dyn AnyView<_, _>> = Box::new(content);
+    let mut view = content.boxed();
     for i in 0..count {
         let color = rainbow((i as f32 / (count - 1) as f32 + 0.001).max(0.0).min(1.0));
-        view = Box::new(border(view).fg(color))
+        view = border(view).fg(color).boxed();
     }
     view
 }
@@ -116,10 +116,10 @@ fn main() -> Result<()> {
                     .on_hover(|state: &mut AppState| {
                         state.current_button_color2 = Color::Yellow;
                     })
-                    .on_hover_lost(|state: &mut AppState| {
+                    .on_blur_hover(|state: &mut AppState| {
                         state.current_button_color2 = Color::Gray;
                     }),
-                rainbow_borders("Rainbow borders!".boxed(), state.count),
+                rainbow_borders("Rainbow borders!", state.count),
             ))
         },
     )

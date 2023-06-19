@@ -3,7 +3,9 @@ use std::cmp::max;
 use taffy::tree::NodeId;
 use unicode_width::UnicodeWidthStr;
 
-use super::{core::EventCx, ChangeFlags, Event, LayoutCx, PaintCx, StyleCx, Widget};
+use super::{
+    core::EventCx, ChangeFlags, Event, LayoutCx, PaintCx, StyleCx, StyleableWidget, Widget,
+};
 
 pub struct Text {
     pub(crate) text: String,
@@ -18,9 +20,15 @@ impl Text {
         // TODO layout only, if width is different...
         ChangeFlags::LAYOUT | ChangeFlags::PAINT
     }
-    pub fn set_style(&mut self, style: Style) -> ChangeFlags {
-        self.style = style;
-        ChangeFlags::PAINT
+}
+
+impl StyleableWidget for Text {
+    fn set_style(&mut self, style: Style) -> bool {
+        let changed = style != self.style;
+        if changed {
+            self.style = style;
+        }
+        changed
     }
 }
 
@@ -39,9 +47,13 @@ impl Widget for Text {
             && (rect.x + min_x as u16) < buf.area.width
             && (rect.y + min_y as u16) < buf.area.height
         {
+            let style = match cx.override_style {
+                Some(style) => style,
+                None => self.style,
+            };
             cx.terminal
                 .current_buffer_mut()
-                .set_string(rect.x, rect.y, &self.text, self.style)
+                .set_string(rect.x, rect.y, &self.text, style)
         }
     }
 
