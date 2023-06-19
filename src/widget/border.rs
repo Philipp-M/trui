@@ -1,4 +1,4 @@
-use super::{core::PaintCx, ChangeFlags, Event, EventCx, LayoutCx, Pod, StyleableWidget, Widget};
+use super::{core::PaintCx, ChangeFlags, Event, EventCx, Pod, StyleableWidget, Widget};
 use crate::view::Borders;
 use ratatui::{layout::Rect, style::Style, symbols};
 use taffy::tree::NodeId;
@@ -110,7 +110,7 @@ impl StyleableWidget for Border {
 }
 
 impl Widget for Border {
-    fn paint(&mut self, cx: &mut PaintCx, rect: Rect) {
+    fn paint(&mut self, cx: &mut PaintCx) {
         let style = match cx.override_style {
             Some(style) => style,
             None => self.border_style,
@@ -122,11 +122,11 @@ impl Widget for Border {
             None
         };
 
-        render_border(cx, rect, self.borders, style);
-        self.content.paint(cx)
+        render_border(cx, cx.rect(), self.borders, style);
+        self.content.paint(cx, cx.rect())
     }
 
-    fn style(&mut self, cx: &mut super::StyleCx, _prev: NodeId) -> NodeId {
+    fn layout(&mut self, cx: &mut super::LayoutCx, _prev: NodeId) -> NodeId {
         let pad = |b| {
             taffy::style::LengthPercentage::Length(if self.borders.contains(b) { 1.0 } else { 0.0 })
         };
@@ -146,14 +146,10 @@ impl Widget for Border {
         };
 
         // TODO diff children...
-        let content = self.content.style(cx);
+        let content = self.content.layout(cx);
         cx.taffy
             .new_with_children(border_style, &[content])
             .unwrap()
-    }
-
-    fn layout(&mut self, cx: &mut LayoutCx, rect: Rect) {
-        self.content.layout(cx, rect)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {

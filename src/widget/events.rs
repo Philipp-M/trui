@@ -1,11 +1,11 @@
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use ratatui::{layout::Rect, style::Style};
+use ratatui::style::Style;
 use taffy::tree::NodeId;
 use xilem_core::Message;
 
 use super::{
     core::{IdPath, PaintCx, StyleableWidget},
-    Event, EventCx, LayoutCx, StyleCx, Widget,
+    Event, EventCx, LayoutCx, Widget,
 };
 
 pub struct OnClick<E> {
@@ -26,16 +26,12 @@ impl<E> OnClick<E> {
 }
 
 impl<E: Widget> Widget for OnClick<E> {
-    fn paint(&mut self, cx: &mut PaintCx, rect: Rect) {
-        self.element.paint(cx, rect);
+    fn paint(&mut self, cx: &mut PaintCx) {
+        self.element.paint(cx);
     }
 
-    fn style(&mut self, cx: &mut StyleCx, prev: NodeId) -> NodeId {
-        self.element.style(cx, prev)
-    }
-
-    fn layout(&mut self, cx: &mut LayoutCx, rect: Rect) {
-        self.element.layout(cx, rect)
+    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
+        self.element.layout(cx, prev)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
@@ -79,16 +75,12 @@ impl<E> OnHover<E> {
 }
 
 impl<E: Widget> Widget for OnHover<E> {
-    fn paint(&mut self, cx: &mut PaintCx, rect: Rect) {
-        self.element.paint(cx, rect);
+    fn paint(&mut self, cx: &mut PaintCx) {
+        self.element.paint(cx);
     }
 
-    fn style(&mut self, cx: &mut StyleCx, prev: NodeId) -> NodeId {
-        self.element.style(cx, prev)
-    }
-
-    fn layout(&mut self, cx: &mut LayoutCx, rect: Rect) {
-        self.element.layout(cx, rect)
+    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
+        self.element.layout(cx, prev)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
@@ -122,16 +114,12 @@ impl<E> OnHoverLost<E> {
 }
 
 impl<E: Widget> Widget for OnHoverLost<E> {
-    fn paint(&mut self, cx: &mut PaintCx, rect: Rect) {
-        self.element.paint(cx, rect);
+    fn paint(&mut self, cx: &mut PaintCx) {
+        self.element.paint(cx);
     }
 
-    fn style(&mut self, cx: &mut StyleCx, prev: NodeId) -> NodeId {
-        self.element.style(cx, prev)
-    }
-
-    fn layout(&mut self, cx: &mut LayoutCx, rect: Rect) {
-        self.element.layout(cx, rect)
+    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
+        self.element.layout(cx, prev)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
@@ -170,24 +158,20 @@ impl<E: Widget + StyleableWidget> StyleableWidget for StyleOnHover<E> {
 }
 
 impl<E: Widget + StyleableWidget> Widget for StyleOnHover<E> {
-    fn paint(&mut self, cx: &mut PaintCx, rect: Rect) {
+    fn paint(&mut self, cx: &mut PaintCx) {
         if cx.override_style.is_none() {
             if self.is_hovering {
                 cx.override_style = Some(self.style);
             };
-            self.element.paint(cx, rect);
+            self.element.paint(cx);
             cx.override_style = None;
         } else {
-            self.element.paint(cx, rect);
+            self.element.paint(cx);
         }
     }
 
-    fn style(&mut self, cx: &mut StyleCx, prev: NodeId) -> NodeId {
-        self.element.style(cx, prev)
-    }
-
-    fn layout(&mut self, cx: &mut LayoutCx, rect: Rect) {
-        self.element.layout(cx, rect)
+    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
+        self.element.layout(cx, prev)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {

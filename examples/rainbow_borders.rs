@@ -11,7 +11,7 @@ pub fn button<T>(
     click_cb: impl Fn(&mut T) + Send,
     hover_cb: impl Fn(&mut T) + Send,
     hover_lost_cb: impl Fn(&mut T) + Send,
-) -> impl View<T> + ViewMarker {
+) -> impl View<T> + ViewMarker + Styleable<T> {
     border(label.into())
         .fg(border_color)
         .on_click(click_cb)

@@ -26,6 +26,7 @@ impl<'a> CxState<'a> {
     }
 }
 
+#[allow(dead_code)]
 pub struct EventCx<'a, 'b> {
     pub(crate) cx_state: &'a mut CxState<'b>,
     pub(crate) widget_state: &'a mut WidgetState,
@@ -33,7 +34,7 @@ pub struct EventCx<'a, 'b> {
 }
 
 #[allow(dead_code)]
-pub struct StyleCx<'a, 'b> {
+pub struct LayoutCx<'a, 'b> {
     pub(crate) cx_state: &'a mut CxState<'b>,
     pub(crate) widget_state: &'a mut WidgetState,
     pub(crate) taffy: &'a mut Taffy,
@@ -44,16 +45,10 @@ pub struct PaintCx<'a, 'b> {
     pub(crate) cx_state: &'a mut CxState<'b>,
     pub(crate) widget_state: &'a WidgetState,
     pub(crate) terminal: &'a mut Terminal<CrosstermBackend<Stdout>>,
+    pub(crate) taffy: &'a mut Taffy,
     // TODO this kinda feels hacky, find a better solution for this issue:
     // this is currently necessary because the most outer styleable widget should be able to override the style for a styleable widget
     pub(crate) override_style: Option<ratatui::style::Style>,
-}
-
-#[allow(dead_code)]
-pub struct LayoutCx<'a, 'b> {
-    pub(crate) cx_state: &'a mut CxState<'b>,
-    pub(crate) widget_state: &'a mut WidgetState,
-    pub(crate) taffy: &'a mut Taffy,
 }
 
 /// A macro for implementing methods on multiple contexts.
@@ -62,6 +57,7 @@ pub struct LayoutCx<'a, 'b> {
 /// have to write them out once.
 macro_rules! impl_context_method {
     ($ty:ty,  { $($method:item)+ } ) => {
+        #[allow(dead_code)] // TODO clean up
         impl $ty { $($method)+ }
     };
     ( $ty:ty, $($more:ty),+, { $($method:item)+ } ) => {
@@ -73,7 +69,7 @@ macro_rules! impl_context_method {
 // Methods on all contexts.
 //
 // These Methods return information about the widget
-impl_context_method!(EventCx<'_, '_>, StyleCx<'_, '_>, LayoutCx<'_, '_>, {
+impl_context_method!(EventCx<'_, '_>, LayoutCx<'_, '_>, PaintCx<'_, '_>, {
     /// Returns whether this widget is hot.
     ///
     /// See [`is_hot`] for more details.
@@ -81,6 +77,10 @@ impl_context_method!(EventCx<'_, '_>, StyleCx<'_, '_>, LayoutCx<'_, '_>, {
     /// [`is_hot`]: super::Pod::is_hot
     pub fn is_hot(&self) -> bool {
         self.widget_state.flags.contains(PodFlags::IS_HOT)
+    }
+
+    pub fn rect(&self) -> Rect {
+        self.widget_state.rect
     }
 
     // /// Returns whether this widget is active.
@@ -256,14 +256,17 @@ impl Pod {
         flags.upwards()
     }
 
-    pub fn style(&mut self, cx: &mut StyleCx) -> NodeId {
-        self.layout_node = self.widget.style(cx, self.layout_node);
+    pub fn layout(&mut self, cx: &mut LayoutCx) -> NodeId {
+        let inner_cx = &mut LayoutCx {
+            cx_state: cx.cx_state,
+            widget_state: &mut self.state,
+            taffy: cx.taffy,
+        };
+        self.layout_node = self.widget.layout(inner_cx, self.layout_node);
         self.layout_node
     }
 
-    // TODO think about the ergonomics of this, Pod::layout takes parent_rect, while Widget::layout takes its own rect...
-    pub fn layout(&mut self, cx: &mut LayoutCx, parent_rect: Rect) {
-        // self.state.rect = cx.taffy.layout(self.layout_node).unwrap().into();
+    pub fn paint(&mut self, cx: &mut PaintCx, parent_rect: Rect) {
         let r = cx.taffy.layout(self.layout_node).unwrap();
         self.state.rect = Rect {
             x: r.location.x as u16,
@@ -273,11 +276,14 @@ impl Pod {
         };
         self.state.rect.x += parent_rect.x;
         self.state.rect.y += parent_rect.y;
-        self.widget.layout(cx, self.state.rect);
-    }
-
-    pub fn paint(&mut self, cx: &mut PaintCx) {
-        self.widget.paint(cx, self.state.rect)
+        let inner_cx = &mut PaintCx {
+            cx_state: cx.cx_state,
+            widget_state: &mut self.state,
+            taffy: cx.taffy,
+            terminal: cx.terminal,
+            override_style: cx.override_style,
+        };
+        self.widget.paint(inner_cx)
     }
 
     // Return true if hot state has changed
@@ -350,14 +356,9 @@ impl Pod {
 }
 
 pub trait Widget {
-    fn paint(&mut self, cx: &mut PaintCx, rect: Rect);
+    fn paint(&mut self, cx: &mut PaintCx);
 
-    // TODO style naming kinda clashes with the Textual style (fg, bg color and modifiers..)
-    fn style(&mut self, cx: &mut StyleCx, prev: NodeId) -> NodeId;
-
-    // TODO should layout uses global coordinates or only relative to the parent?
-    // TODO should this be done in the "paint job"
-    fn layout(&mut self, cx: &mut LayoutCx, rect: Rect);
+    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId;
 
     fn event(&mut self, cx: &mut EventCx, event: &Event);
 }
@@ -385,20 +386,16 @@ impl<W: Widget + 'static> AnyWidget for W {
 }
 
 impl Widget for Box<dyn AnyWidget> {
-    fn paint(&mut self, cx: &mut PaintCx, rect: Rect) {
-        self.deref_mut().paint(cx, rect)
+    fn paint(&mut self, cx: &mut PaintCx) {
+        self.deref_mut().paint(cx)
     }
 
-    fn style(&mut self, cx: &mut StyleCx, prev: NodeId) -> NodeId {
-        self.deref_mut().style(cx, prev)
+    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
+        self.deref_mut().layout(cx, prev)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
         self.deref_mut().event(cx, event)
-    }
-
-    fn layout(&mut self, cx: &mut LayoutCx, rect: Rect) {
-        self.deref_mut().layout(cx, rect)
     }
 }
 

@@ -25,7 +25,7 @@ bitflags! {
     }
 }
 
-pub trait Styleable<T, A> {
+pub trait Styleable<T, A = ()> {
     type Output: View<T, A>;
     fn fg(self, color: Color) -> Self::Output;
     fn bg(self, color: Color) -> Self::Output;

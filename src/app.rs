@@ -1,6 +1,6 @@
 use crate::{
     view::{Cx, View},
-    widget::{CxState, Event, EventCx, LayoutCx, PaintCx, Pod, StyleCx, WidgetState},
+    widget::{CxState, Event, EventCx, LayoutCx, PaintCx, Pod, WidgetState},
 };
 use anyhow::Result;
 use crossterm::{
@@ -82,13 +82,13 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
         // this should be cached, and only the parts that actually changed should be updated...
         self.taffy.clear();
         let cx_state = &mut CxState::new(&mut self.events);
-        let mut style_cx = StyleCx {
+        let mut layout_cx = LayoutCx {
             taffy: &mut self.taffy,
             widget_state: &mut self.root_state,
             cx_state,
         };
 
-        let layout_node = root_pod.style(&mut style_cx);
+        let layout_node = root_pod.layout(&mut layout_cx);
         self.taffy
             .compute_layout(
                 layout_node,
@@ -99,14 +99,16 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
             )
             .ok();
 
-        let mut layout_cx = LayoutCx {
-            taffy: &mut self.taffy,
+        let mut paint_cx = PaintCx {
             widget_state: &mut self.root_state,
             cx_state,
+            terminal: &mut self.terminal,
+            taffy: &mut self.taffy,
+            override_style: None,
         };
 
-        root_pod.layout(
-            &mut layout_cx,
+        root_pod.paint(
+            &mut paint_cx,
             Rect {
                 x: 0,
                 y: 0,
@@ -114,15 +116,6 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
                 height,
             },
         );
-
-        let mut paint_cx = PaintCx {
-            widget_state: &mut self.root_state,
-            cx_state,
-            terminal: &mut self.terminal,
-            override_style: None,
-        };
-
-        root_pod.paint(&mut paint_cx);
     }
 
     pub fn run(mut self) -> Result<()> {

@@ -1,4 +1,3 @@
-use ratatui::layout::Rect;
 use taffy::{
     prelude::NodeId,
     style::{FlexDirection, Style},
@@ -6,7 +5,7 @@ use taffy::{
 
 use super::{
     core::{EventCx, PaintCx},
-    LayoutCx, Pod, StyleCx, Widget,
+    LayoutCx, Pod, Widget,
 };
 
 pub struct LinearLayout {
@@ -15,13 +14,13 @@ pub struct LinearLayout {
 }
 
 impl Widget for LinearLayout {
-    fn paint(&mut self, cx: &mut PaintCx, _rect: Rect) {
+    fn paint(&mut self, cx: &mut PaintCx) {
         for child in self.children.iter_mut() {
-            child.paint(cx);
+            child.paint(cx, cx.rect());
         }
     }
 
-    fn style(&mut self, cx: &mut StyleCx, _prev: NodeId) -> NodeId {
+    fn layout(&mut self, cx: &mut LayoutCx, _prev: NodeId) -> NodeId {
         let style = Style {
             size: taffy::prelude::Size {
                 width: taffy::style::Dimension::Percent(1.0),
@@ -33,7 +32,7 @@ impl Widget for LinearLayout {
         let children: Vec<_> = self
             .children
             .iter_mut()
-            .map(|child| child.style(cx))
+            .map(|child| child.layout(cx))
             .collect();
         cx.taffy.new_with_children(style, &children).unwrap()
     }
@@ -41,12 +40,6 @@ impl Widget for LinearLayout {
     fn event(&mut self, cx: &mut EventCx, event: &super::Event) {
         for child in &mut self.children {
             child.event(cx, event);
-        }
-    }
-
-    fn layout(&mut self, cx: &mut LayoutCx, rect: Rect) {
-        for child in &mut self.children {
-            child.layout(cx, rect);
         }
     }
 }

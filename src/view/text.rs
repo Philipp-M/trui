@@ -13,7 +13,6 @@ impl<T, A> View<T, A> for &str {
     fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, element) = cx.with_new_id(|_| widget::Text {
             text: String::from(*self),
-            rect: Default::default(),
             style: Style::reset(),
         });
         (id, (), element)
@@ -115,7 +114,6 @@ impl<T, A> View<T, A> for Text<T, A> {
     fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, element) = cx.with_new_id(|_| widget::Text {
             text: self.text.clone(),
-            rect: Default::default(),
             style: self.style,
         });
         (id, (), element)

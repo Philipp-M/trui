@@ -6,7 +6,7 @@ mod text;
 
 pub(crate) use self::core::WidgetState;
 pub use self::core::{
-    AnyWidget, ChangeFlags, CxState, Event, EventCx, LayoutCx, PaintCx, Pod, Point, StyleCx,
+    AnyWidget, ChangeFlags, CxState, Event, EventCx, LayoutCx, PaintCx, Pod, Point,
     StyleableWidget, Widget,
 };
 pub use border::Border;

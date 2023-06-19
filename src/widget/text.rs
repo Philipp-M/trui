@@ -1,15 +1,12 @@
-use ratatui::{layout::Rect, style::Style};
+use ratatui::style::Style;
 use std::cmp::max;
 use taffy::tree::NodeId;
 use unicode_width::UnicodeWidthStr;
 
-use super::{
-    core::EventCx, ChangeFlags, Event, LayoutCx, PaintCx, StyleCx, StyleableWidget, Widget,
-};
+use super::{core::EventCx, ChangeFlags, Event, LayoutCx, PaintCx, StyleableWidget, Widget};
 
 pub struct Text {
     pub(crate) text: String,
-    pub(crate) rect: Rect,
     pub(crate) style: Style,
 }
 
@@ -33,10 +30,11 @@ impl StyleableWidget for Text {
 }
 
 impl Widget for Text {
-    fn paint(&mut self, cx: &mut PaintCx, rect: Rect) {
+    fn paint(&mut self, cx: &mut PaintCx) {
         let (min_x, min_y) = self.text.lines().fold((0, 0), |(min_x, min_y), l| {
             (max(min_x, l.width()), min_y + 1)
         });
+        let rect = cx.rect();
 
         let buf = cx.terminal.current_buffer_mut();
         // TODO multiline
@@ -57,7 +55,7 @@ impl Widget for Text {
         }
     }
 
-    fn style(&mut self, cx: &mut StyleCx, prev: NodeId) -> NodeId {
+    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
         let (min_x, min_y) = self.text.lines().fold((0, 0), |(min_x, min_y), l| {
             (max(min_x, l.width()), min_y + 1)
         });
@@ -81,8 +79,4 @@ impl Widget for Text {
     }
 
     fn event(&mut self, _cx: &mut EventCx, _event: &Event) {}
-
-    fn layout(&mut self, _cx: &mut LayoutCx, rect: Rect) {
-        self.rect = rect;
-    }
 }
