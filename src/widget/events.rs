@@ -11,15 +11,12 @@ use super::{
 pub struct OnClick<E> {
     pub element: E,
     id_path: IdPath,
-    is_pressed: bool,
 }
 
 impl<E> OnClick<E> {
     pub fn new(element: E, id_path: &IdPath) -> Self {
         OnClick {
             element,
-            // TODO put this into core widget logic, like in xilem
-            is_pressed: false,
             id_path: id_path.clone(),
         }
     }
@@ -35,12 +32,14 @@ impl<E: Widget> Widget for OnClick<E> {
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
+        self.element.event(cx, event);
+
         if let Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             ..
         }) = event
         {
-            self.is_pressed = cx.is_hot();
+            cx.set_active(cx.is_hot());
         }
 
         if let Event::Mouse(MouseEvent {
@@ -48,13 +47,11 @@ impl<E: Widget> Widget for OnClick<E> {
             ..
         }) = event
         {
-            if self.is_pressed && cx.is_hot() {
+            if cx.is_hot() && cx.is_active() {
                 cx.add_message(Message::new(self.id_path.clone(), ()));
             }
-            self.is_pressed = false;
+            cx.set_active(false);
         }
-        // TODO catch/consume event?
-        self.element.event(cx, event)
     }
 }
 
@@ -84,8 +81,8 @@ impl<E: Widget> Widget for OnHover<E> {
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
-        // TODO catch/consume event?
         self.element.event(cx, event);
+
         if matches!(event, Event::Mouse(_)) {
             if cx.is_hot() && !self.is_hovering {
                 self.is_hovering = true;
@@ -124,6 +121,7 @@ impl<E: Widget> Widget for OnHoverLost<E> {
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
         self.element.event(cx, event);
+
         if matches!(event, Event::Mouse(_)) {
             if cx.is_hot() && !self.is_hovering {
                 self.is_hovering = true;
@@ -175,10 +173,10 @@ impl<E: Widget + StyleableWidget> Widget for StyleOnHover<E> {
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
+        self.element.event(cx, event);
+
         if matches!(event, Event::Mouse(_)) {
             self.is_hovering = cx.is_hot();
         }
-        // TODO catch/consume event?
-        self.element.event(cx, event)
     }
 }

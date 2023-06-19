@@ -26,21 +26,18 @@ impl<'a> CxState<'a> {
     }
 }
 
-#[allow(dead_code)]
 pub struct EventCx<'a, 'b> {
     pub(crate) cx_state: &'a mut CxState<'b>,
     pub(crate) widget_state: &'a mut WidgetState,
     pub(crate) is_handled: bool,
 }
 
-#[allow(dead_code)]
 pub struct LayoutCx<'a, 'b> {
     pub(crate) cx_state: &'a mut CxState<'b>,
     pub(crate) widget_state: &'a mut WidgetState,
     pub(crate) taffy: &'a mut Taffy,
 }
 
-#[allow(dead_code)]
 pub struct PaintCx<'a, 'b> {
     pub(crate) cx_state: &'a mut CxState<'b>,
     pub(crate) widget_state: &'a WidgetState,
@@ -83,14 +80,14 @@ impl_context_method!(EventCx<'_, '_>, LayoutCx<'_, '_>, PaintCx<'_, '_>, {
         self.widget_state.rect
     }
 
-    // /// Returns whether this widget is active.
-    // ///
-    // /// See [`is_active`] for more details.
-    // ///
-    // /// [`is_active`]: super::Pod::is_active
-    // pub fn is_active(&self) -> bool {
-    //     self.widget_state.flags.contains(PodFlags::IS_ACTIVE)
-    // }
+    /// Returns whether this widget is active.
+    ///
+    /// See [`is_active`] for more details.
+    ///
+    /// [`is_active`]: super::Pod::is_active
+    pub fn is_active(&self) -> bool {
+        self.widget_state.flags.contains(PodFlags::IS_ACTIVE)
+    }
 });
 
 // TODO add the other contexts
@@ -108,6 +105,26 @@ impl_context_method!(EventCx<'_, '_>, {
         self.cx_state.messages.push(message);
     }
 });
+
+impl<'a, 'b> EventCx<'a, 'b> {
+    /// Set the [`active`] state of the widget.
+    ///
+    /// [`active`]: Pod::is_active.
+    pub fn set_active(&mut self, is_active: bool) {
+        self.widget_state.flags.set(PodFlags::IS_ACTIVE, is_active);
+    }
+
+    /// Set the event as "handled", which stops its propagation to other
+    /// widgets.
+    pub fn set_handled(&mut self, is_handled: bool) {
+        self.is_handled = is_handled;
+    }
+
+    /// Determine whether the event has been handled by some other widget.
+    pub fn is_handled(&self) -> bool {
+        self.is_handled
+    }
+}
 
 pub fn rect_contains(rect: &Rect, pos: Point) -> bool {
     pos.x >= rect.x
