@@ -32,16 +32,7 @@ impl<E: Widget> Widget for OnClick<E> {
     }
 
     fn layout(&mut self, cx: &mut LayoutCx, _prev: NodeId) -> NodeId {
-        let content = self.element.layout(cx);
-        let style = taffy::style::Style {
-            size: taffy::prelude::Size {
-                width: taffy::style::Dimension::Percent(1.0),
-                height: taffy::style::Dimension::Percent(1.0),
-            },
-            ..Default::default()
-        };
-
-        cx.taffy.new_with_children(style, &[content]).unwrap()
+        self.element.layout(cx)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
@@ -218,16 +209,7 @@ impl<E: Widget + StyleableWidget> Widget for StyleOnPressed<E> {
     }
 
     fn layout(&mut self, cx: &mut LayoutCx, _prev: NodeId) -> NodeId {
-        let content = self.element.layout(cx);
-        let style = taffy::style::Style {
-            size: taffy::prelude::Size {
-                width: taffy::style::Dimension::Percent(1.0),
-                height: taffy::style::Dimension::Percent(1.0),
-            },
-            ..Default::default()
-        };
-
-        cx.taffy.new_with_children(style, &[content]).unwrap()
+        self.element.layout(cx)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {

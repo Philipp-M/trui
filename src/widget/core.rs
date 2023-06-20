@@ -217,6 +217,7 @@ pub(crate) struct WidgetState {
     // pub(crate) id: Id,
     pub(crate) flags: PodFlags,
     pub(crate) rect: Rect,
+    pub(crate) layout_node: NodeId,
     // TODO useful?
     // /// The origin of the parent in the window coordinate space.
     // pub(crate) parent_window_origin: Point,
@@ -229,6 +230,7 @@ impl WidgetState {
             // id,
             flags: PodFlags::INIT_FLAGS,
             rect: Default::default(),
+            layout_node: NodeId::new(0),
         }
     }
 
@@ -244,7 +246,6 @@ impl WidgetState {
 pub struct Pod {
     pub(crate) state: WidgetState,
     pub(crate) widget: Box<dyn AnyWidget>,
-    pub(crate) layout_node: NodeId,
 }
 
 impl Pod {
@@ -264,7 +265,6 @@ impl Pod {
         Pod {
             state: WidgetState::new(),
             widget,
-            layout_node: NodeId::new(0),
         }
     }
 
@@ -281,25 +281,31 @@ impl Pod {
     }
 
     pub fn layout(&mut self, cx: &mut LayoutCx) -> NodeId {
+        let node = self.state.layout_node;
         let inner_cx = &mut LayoutCx {
             cx_state: cx.cx_state,
             widget_state: &mut self.state,
             taffy: cx.taffy,
         };
-        self.layout_node = self.widget.layout(inner_cx, self.layout_node);
-        self.layout_node
+        self.state.layout_node = self.widget.layout(inner_cx, node);
+        self.state.layout_node
     }
 
     pub fn paint(&mut self, cx: &mut PaintCx, parent_rect: Rect) {
-        let r = cx.taffy.layout(self.layout_node).unwrap();
-        self.state.rect = Rect {
-            x: r.location.x as u16,
-            y: r.location.y as u16,
-            width: r.size.width as u16,
-            height: r.size.height as u16,
-        };
-        self.state.rect.x += parent_rect.x;
-        self.state.rect.y += parent_rect.y;
+        if cx.widget_state.layout_node == self.state.layout_node {
+            self.state.rect = parent_rect;
+        } else {
+            let r = cx.taffy.layout(self.state.layout_node).unwrap();
+            self.state.rect = Rect {
+                x: r.location.x as u16,
+                y: r.location.y as u16,
+                width: r.size.width as u16,
+                height: r.size.height as u16,
+            };
+            self.state.rect.x += parent_rect.x;
+            self.state.rect.y += parent_rect.y;
+        }
+
         let inner_cx = &mut PaintCx {
             cx_state: cx.cx_state,
             widget_state: &mut self.state,
