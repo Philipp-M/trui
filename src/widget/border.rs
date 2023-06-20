@@ -111,15 +111,11 @@ impl StyleableWidget for Border {
 
 impl Widget for Border {
     fn paint(&mut self, cx: &mut PaintCx) {
-        let style = match cx.override_style {
-            Some(style) => style,
-            None => self.border_style,
-        };
-
+        let style = self.border_style.patch(cx.override_style);
         cx.override_style = if self.inherit_style {
-            Some(style)
+            style
         } else {
-            None
+            Style::default()
         };
 
         render_border(cx, cx.rect(), self.borders, style);

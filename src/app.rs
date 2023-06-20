@@ -104,7 +104,7 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
             cx_state,
             terminal: &mut self.terminal,
             taffy: &mut self.taffy,
-            override_style: None,
+            override_style: ratatui::style::Style::default(),
         };
 
         root_pod.paint(

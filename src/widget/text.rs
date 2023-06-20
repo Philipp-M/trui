@@ -45,10 +45,8 @@ impl Widget for Text {
             && (rect.x + min_x as u16) < buf.area.width
             && (rect.y + min_y as u16) < buf.area.height
         {
-            let style = match cx.override_style {
-                Some(style) => style,
-                None => self.style,
-            };
+            let style = self.style.patch(cx.override_style);
+
             cx.terminal
                 .current_buffer_mut()
                 .set_string(rect.x, rect.y, &self.text, style)

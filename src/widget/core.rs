@@ -45,7 +45,7 @@ pub struct PaintCx<'a, 'b> {
     pub(crate) taffy: &'a mut Taffy,
     // TODO this kinda feels hacky, find a better solution for this issue:
     // this is currently necessary because the most outer styleable widget should be able to override the style for a styleable widget
-    pub(crate) override_style: Option<ratatui::style::Style>,
+    pub(crate) override_style: ratatui::style::Style,
 }
 
 /// A macro for implementing methods on multiple contexts.
@@ -87,6 +87,13 @@ impl_context_method!(EventCx<'_, '_>, LayoutCx<'_, '_>, PaintCx<'_, '_>, {
     /// [`is_active`]: super::Pod::is_active
     pub fn is_active(&self) -> bool {
         self.widget_state.flags.contains(PodFlags::IS_ACTIVE)
+    }
+
+    /// Returns `true` if any descendant is [`active`].
+    ///
+    /// [`active`]: Pod::is_active
+    pub fn has_active(&self) -> bool {
+        self.widget_state.flags.contains(PodFlags::HAS_ACTIVE)
     }
 });
 

@@ -12,6 +12,6 @@ pub use self::core::{AnyView, BoxedView, Cx, View, ViewMarker, ViewSequence};
 pub use adapt::{Adapt, AdaptThunk};
 pub use border::{border, Border};
 pub use common::{Borders, Styleable};
-pub use events::{Clickable, HoverStyleable, Hoverable, OnClick, OnHover};
+pub use events::*;
 pub use linear_layout::{h_stack, v_stack, LinearLayout};
 pub use text::Text;

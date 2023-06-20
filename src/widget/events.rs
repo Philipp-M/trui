@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::style::Style;
 use taffy::tree::NodeId;
@@ -5,7 +7,7 @@ use xilem_core::Message;
 
 use super::{
     core::{IdPath, PaintCx, StyleableWidget},
-    Event, EventCx, LayoutCx, Widget,
+    Event, EventCx, LayoutCx, Pod, Widget,
 };
 
 pub struct OnClick<E> {
@@ -42,6 +44,7 @@ impl<E: Widget> Widget for OnClick<E> {
             cx.set_active(cx.is_hot());
         }
 
+        // TODO handle other events like e.g. FocusLost
         if let Event::Mouse(MouseEvent {
             kind: MouseEventKind::Up(MouseButton::Left),
             ..
@@ -135,37 +138,21 @@ impl<E: Widget> Widget for OnHoverLost<E> {
 
 pub struct StyleOnHover<E> {
     pub element: E,
-    is_hovering: bool,
     style: Style,
 }
 
 impl<E> StyleOnHover<E> {
     pub fn new(element: E, style: Style) -> Self {
-        StyleOnHover {
-            element,
-            is_hovering: false,
-            style,
-        }
-    }
-}
-
-impl<E: Widget + StyleableWidget> StyleableWidget for StyleOnHover<E> {
-    fn set_style(&mut self, style: ratatui::style::Style) -> bool {
-        self.element.set_style(style)
+        StyleOnHover { element, style }
     }
 }
 
 impl<E: Widget + StyleableWidget> Widget for StyleOnHover<E> {
     fn paint(&mut self, cx: &mut PaintCx) {
-        if cx.override_style.is_none() {
-            if self.is_hovering {
-                cx.override_style = Some(self.style);
-            };
-            self.element.paint(cx);
-            cx.override_style = None;
-        } else {
-            self.element.paint(cx);
-        }
+        if cx.is_hot() {
+            cx.override_style = self.style.patch(cx.override_style);
+        };
+        self.element.paint(cx);
     }
 
     fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
@@ -174,9 +161,81 @@ impl<E: Widget + StyleableWidget> Widget for StyleOnHover<E> {
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
         self.element.event(cx, event);
+    }
+}
 
-        if matches!(event, Event::Mouse(_)) {
-            self.is_hovering = cx.is_hot();
+pub struct StyleOnPressed<E> {
+    pub(crate) element: Pod,
+    style: Style,
+    phantom: PhantomData<E>,
+}
+
+impl<E: Widget + 'static> StyleOnPressed<E> {
+    pub fn new(element: E, style: Style) -> Self {
+        StyleOnPressed {
+            element: Pod::new(element),
+            style,
+            phantom: PhantomData,
         }
     }
 }
+
+impl<E: Widget + StyleableWidget + 'static> StyleableWidget for StyleOnPressed<E> {
+    fn set_style(&mut self, style: ratatui::style::Style) -> bool {
+        self.element
+            .downcast_mut::<E>()
+            .map(|e| e.set_style(style))
+            .unwrap_or(true)
+    }
+}
+
+impl<E: Widget + StyleableWidget> Widget for StyleOnPressed<E> {
+    fn paint(&mut self, cx: &mut PaintCx) {
+        if cx.is_active() {
+            cx.override_style = self.style.patch(cx.override_style);
+        };
+        self.element.paint(cx, cx.rect());
+    }
+
+    fn layout(&mut self, cx: &mut LayoutCx, _prev: NodeId) -> NodeId {
+        let content = self.element.layout(cx);
+        cx.taffy
+            .new_with_children(Default::default(), &[content])
+            .unwrap()
+    }
+
+    fn event(&mut self, cx: &mut EventCx, event: &Event) {
+        self.element.event(cx, event);
+
+        if let Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            ..
+        }) = event
+        {
+            cx.set_active(cx.is_hot());
+        }
+
+        // TODO handle other events like e.g. FocusLost
+        if let Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            ..
+        }) = event
+        {
+            cx.set_active(false);
+        }
+    }
+}
+
+macro_rules! styleable_widget_events {
+    ($($name:ident),*) => {
+    $(
+    impl<E: Widget + StyleableWidget> StyleableWidget for $name<E> {
+        fn set_style(&mut self, style: ratatui::style::Style) -> bool {
+            self.element.set_style(style)
+        }
+    }
+    )*
+    };
+}
+
+styleable_widget_events!(OnClick, OnHover, OnHoverLost, StyleOnHover);
