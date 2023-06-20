@@ -11,26 +11,32 @@ use super::{
 };
 
 pub struct OnClick<E> {
-    pub element: E,
+    pub(crate) element: Pod,
     id_path: IdPath,
+    phantom: PhantomData<E>,
 }
 
-impl<E> OnClick<E> {
+impl<E: Widget + 'static> OnClick<E> {
     pub fn new(element: E, id_path: &IdPath) -> Self {
         OnClick {
-            element,
+            element: Pod::new(element),
             id_path: id_path.clone(),
+            phantom: PhantomData,
         }
     }
 }
 
 impl<E: Widget> Widget for OnClick<E> {
     fn paint(&mut self, cx: &mut PaintCx) {
-        self.element.paint(cx);
+        self.element.paint(cx, cx.rect());
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
-        self.element.layout(cx, prev)
+    fn layout(&mut self, cx: &mut LayoutCx, _prev: NodeId) -> NodeId {
+        // TODO likely fill the parent as style instead of the default
+        let content = self.element.layout(cx);
+        cx.taffy
+            .new_with_children(Default::default(), &[content])
+            .unwrap()
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
@@ -55,6 +61,15 @@ impl<E: Widget> Widget for OnClick<E> {
             }
             cx.set_active(false);
         }
+    }
+}
+
+impl<E: Widget + StyleableWidget + 'static> StyleableWidget for OnClick<E> {
+    fn set_style(&mut self, style: ratatui::style::Style) -> bool {
+        self.element
+            .downcast_mut::<E>()
+            .map(|e| e.set_style(style))
+            .unwrap_or(true)
     }
 }
 
@@ -198,6 +213,7 @@ impl<E: Widget + StyleableWidget> Widget for StyleOnPressed<E> {
     }
 
     fn layout(&mut self, cx: &mut LayoutCx, _prev: NodeId) -> NodeId {
+        // TODO likely fill the parent as style instead of the default
         let content = self.element.layout(cx);
         cx.taffy
             .new_with_children(Default::default(), &[content])
@@ -238,4 +254,4 @@ macro_rules! styleable_widget_events {
     };
 }
 
-styleable_widget_events!(OnClick, OnHover, OnHoverLost, StyleOnHover);
+styleable_widget_events!(OnHover, OnHoverLost, StyleOnHover);
