@@ -8,6 +8,7 @@ pub fn button<T: 'static>(
 ) -> impl View<T> + ViewMarker {
     border(content.boxed())
         .bg(Color::LightGreen)
+        .inherit_style(true)
         .on_hover_style(Style::default().fg(Color::Green).bg(Color::LightYellow))
         .on_pressed_fg(Color::Blue)
         .on_click(click_cb)
@@ -16,9 +17,10 @@ pub fn button<T: 'static>(
 fn main() -> Result<()> {
     App::new(0, |count| {
         v_stack((
-            button(format!("Click me, ({count})").fg(Color::Green), |count| {
-                *count += 1
-            }),
+            button(
+                format!("Click me to increment the count: {count}").fg(Color::Green),
+                |count| *count += 1,
+            ),
             button("Click me to decrement".fg(Color::Red), |count| *count -= 1),
         ))
     })
