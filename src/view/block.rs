@@ -6,31 +6,32 @@ use super::{Borders, Cx, Styleable, View, ViewMarker};
 use ratatui::style::{Color, Style};
 use xilem_core::MessageResult;
 
-pub struct Border<T, A, V> {
+pub struct Block<T, A, V> {
     content: V,
     borders: Borders,
     phantom: PhantomData<fn() -> (T, A)>,
     border_style: Style,
+    fill_with_bg: bool,
     inherit_style: bool,
 }
 
-impl<T, A, V> ViewMarker for Border<T, A, V> {}
+impl<T, A, V> ViewMarker for Block<T, A, V> {}
 
-impl<T, A, V> View<T, A> for Border<T, A, V>
+impl<T, A, V> View<T, A> for Block<T, A, V>
 where
     V: View<T, A>,
     V::Element: 'static,
 {
     type State = (V::State, xilem_core::Id);
 
-    type Element = widget::Border;
+    type Element = widget::Block;
 
     fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, (state, element)) = cx.with_new_id(|cx| {
             let (child_id, state, element) = self.content.build(cx);
             (
                 (state, child_id),
-                widget::Border::new(element, self.borders, self.border_style, self.inherit_style),
+                widget::Block::new(element, self.borders, self.border_style, self.inherit_style),
             )
         });
         (id, state, element)
@@ -82,7 +83,7 @@ where
     }
 }
 
-impl<T, A, V> Styleable<T, A> for Border<T, A, V>
+impl<T, A, V> Styleable<T, A> for Block<T, A, V>
 where
     V: View<T, A>,
     V::Element: 'static,
@@ -114,19 +115,25 @@ where
     }
 }
 
-impl<T, A, V> Border<T, A, V> {
+impl<T, A, V> Block<T, A, V> {
     pub fn inherit_style(mut self, inherit: bool) -> Self {
         self.inherit_style = inherit;
         self
     }
+
+    pub fn fill_with_bg(mut self, fill: bool) -> Self {
+        self.fill_with_bg = fill;
+        self
+    }
 }
 
-pub fn border<T, A, V>(content: V) -> Border<T, A, V> {
-    Border {
+pub fn block<T, A, V>(content: V) -> Block<T, A, V> {
+    Block {
         content,
         borders: Borders::ALL,
         phantom: PhantomData,
-        border_style: Style::reset(),
+        border_style: Style::default(),
         inherit_style: false,
+        fill_with_bg: true,
     }
 }

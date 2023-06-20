@@ -1,4 +1,4 @@
-mod border;
+mod block;
 mod core;
 mod events;
 mod linear_layout;
@@ -9,7 +9,7 @@ pub use self::core::{
     AnyWidget, ChangeFlags, CxState, Event, EventCx, LayoutCx, PaintCx, Pod, Point,
     StyleableWidget, Widget,
 };
-pub use border::Border;
+pub use block::Block;
 pub use events::*;
 pub use linear_layout::LinearLayout;
 pub use ratatui::layout::Rect;

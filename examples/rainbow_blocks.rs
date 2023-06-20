@@ -1,19 +1,19 @@
 use anyhow::Result;
 use ratatui::style::Color;
 use trui::{
-    border, v_stack, AnyView, App, BoxedView, Clickable, Hoverable, Styleable, View, ViewMarker,
+    block, v_stack, AnyView, App, BoxedView, Clickable, Hoverable, Styleable, View, ViewMarker,
 };
 
 // TODO this basic logic (hover, styling etc.) should probably be its own widget (state)...
 pub fn button<T>(
     label: impl Into<String>,
-    border_color: Color,
+    block_color: Color,
     click_cb: impl Fn(&mut T) + Send,
     hover_cb: impl Fn(&mut T) + Send,
     hover_lost_cb: impl Fn(&mut T) + Send,
 ) -> impl View<T> + ViewMarker + Styleable<T> {
-    border(label.into())
-        .fg(border_color)
+    block(label.into())
+        .fg(block_color)
         .on_click(click_cb)
         .on_hover(hover_cb)
         .on_blur_hover(hover_lost_cb)
@@ -37,14 +37,11 @@ fn rainbow(normalized_value: f32) -> Color {
     Color::Rgb(red as u8, green as u8, blue as u8)
 }
 
-pub fn rainbow_borders<T: 'static>(
-    content: impl BoxedView<T>,
-    count: usize,
-) -> Box<dyn AnyView<T>> {
+pub fn rainbow_blocks<T: 'static>(content: impl BoxedView<T>, count: usize) -> Box<dyn AnyView<T>> {
     let mut view = content.boxed();
     for i in 0..count {
         let color = rainbow((i as f32 / (count - 1) as f32 + 0.001).max(0.0).min(1.0));
-        view = border(view).fg(color).boxed();
+        view = block(view).fg(color).boxed();
     }
     view
 }
@@ -77,16 +74,14 @@ fn main() -> Result<()> {
             } else if state.count > 10 && state.count < 42 {
                 Box::new(format!("Count is bigger than 10 ({})", state.count).fg(Color::Gray))
             } else if state.count == 42 {
-                Box::new(
-                    border("You have found the sense of life!".fg(Color::Green)).fg(Color::Red),
-                )
+                Box::new(block("You have found the sense of life!".fg(Color::Green)).fg(Color::Red))
             } else {
                 let color = Color::Rgb(
                     255usize.saturating_sub(state.count * 2) as u8,
                     255usize.saturating_sub(state.count * 2) as u8,
                     255usize.saturating_sub(state.count * 2) as u8,
                 );
-                Box::new(border("Everything's downhill from here on...".fg(color)).fg(color))
+                Box::new(block("Everything's downhill from here on...".fg(color)).fg(color))
             };
 
             v_stack((
@@ -107,7 +102,7 @@ fn main() -> Result<()> {
                     },
                 ),
                 // this is (almost) the equivalent...
-                border(v)
+                block(v)
                     .fg(state.current_button_color2)
                     .on_click(|state: &mut AppState| {
                         state.current_button_color2 = Color::Red;
@@ -119,7 +114,7 @@ fn main() -> Result<()> {
                     .on_blur_hover(|state: &mut AppState| {
                         state.current_button_color2 = Color::Gray;
                     }),
-                rainbow_borders("Rainbow borders!", state.count),
+                rainbow_blocks("Rainbow blocks!", state.count),
             ))
         },
     )

@@ -13,7 +13,7 @@ impl<T, A> View<T, A> for &str {
     fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, element) = cx.with_new_id(|_| widget::Text {
             text: String::from(*self),
-            style: Style::reset(),
+            style: Style::default(),
         });
         (id, (), element)
     }
@@ -81,7 +81,7 @@ impl<T, A> From<&str> for Text<T, A> {
     fn from(text: &str) -> Self {
         Text {
             text: text.into(),
-            style: Style::reset(),
+            style: Style::default(),
             phantom: PhantomData,
         }
     }
@@ -91,7 +91,7 @@ impl<T, A> From<String> for Text<T, A> {
     fn from(text: String) -> Self {
         Text {
             text,
-            style: Style::reset(),
+            style: Style::default(),
             phantom: PhantomData,
         }
     }
@@ -169,7 +169,7 @@ impl<T, A, S: Into<String>> Styleable<T, A> for S {
     }
 
     fn current_style(&self) -> Style {
-        Style::reset()
+        Style::default()
     }
 }
 

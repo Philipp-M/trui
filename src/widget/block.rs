@@ -58,23 +58,35 @@ pub fn render_border(cx: &mut PaintCx, r: Rect, borders: Borders, style: Style) 
     }
 }
 
-pub struct Border {
+fn fill_block(cx: &mut PaintCx, r: Rect, style: Style) {
+    let buf = cx.terminal.current_buffer_mut();
+
+    for x in r.x..(buf.area.width.min(r.width + r.x)) {
+        for y in r.y..(buf.area.height.min(r.height + r.y)) {
+            buf.get_mut(x, y).set_style(style);
+        }
+    }
+}
+
+pub struct Block {
     pub(crate) content: Pod,
     borders: Borders,
     border_style: Style,
+    fill_with_bg: bool,
     inherit_style: bool,
 }
 
-impl Border {
+impl Block {
     pub fn new(
         content: impl Widget + 'static,
         borders: Borders,
         border_style: Style,
         inherit_style: bool,
     ) -> Self {
-        Border {
+        Block {
             content: Pod::new(content),
             borders,
+            fill_with_bg: true,
             border_style,
             inherit_style,
         }
@@ -99,7 +111,7 @@ impl Border {
     }
 }
 
-impl StyleableWidget for Border {
+impl StyleableWidget for Block {
     fn set_style(&mut self, style: Style) -> bool {
         let changed = style != self.border_style;
         if changed {
@@ -109,7 +121,7 @@ impl StyleableWidget for Border {
     }
 }
 
-impl Widget for Border {
+impl Widget for Block {
     fn paint(&mut self, cx: &mut PaintCx) {
         let style = self.border_style.patch(cx.override_style);
         cx.override_style = if self.inherit_style {
@@ -118,7 +130,16 @@ impl Widget for Border {
             Style::default()
         };
 
+        if self.fill_with_bg {
+            let fill_style = Style {
+                bg: style.bg,
+                ..Default::default()
+            };
+            fill_block(cx, cx.rect(), fill_style);
+        }
+
         render_border(cx, cx.rect(), self.borders, style);
+
         self.content.paint(cx, cx.rect())
     }
 
