@@ -15,10 +15,14 @@ pub struct Text {
 
 // TODO maybe a generic macro for stuff like below?
 impl Text {
-    pub fn set_text(&mut self, text: String) -> ChangeFlags {
-        self.text = text;
-        // TODO layout only, if width is different...
-        ChangeFlags::LAYOUT | ChangeFlags::PAINT
+    pub fn set_text(&mut self, text: &str) -> ChangeFlags {
+        let mut changeflags = ChangeFlags::empty();
+        if self.text != text {
+            changeflags.set(ChangeFlags::LAYOUT, self.text.width() != text.width());
+            changeflags |= ChangeFlags::PAINT;
+            self.text = text.to_string();
+        }
+        changeflags
     }
 }
 

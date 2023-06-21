@@ -21,16 +21,12 @@ impl<T, A> View<T, A> for &str {
     fn rebuild(
         &self,
         _cx: &mut Cx,
-        prev: &Self,
+        _prev: &Self,
         _id: &mut xilem_core::Id,
         _state: &mut Self::State,
         element: &mut Self::Element,
     ) -> ChangeFlags {
-        if prev != self {
-            element.set_text(self.to_string())
-        } else {
-            ChangeFlags::empty()
-        }
+        element.set_text(self)
     }
 
     fn message(
@@ -122,16 +118,12 @@ impl<T, A> View<T, A> for Text<T, A> {
     fn rebuild(
         &self,
         _cx: &mut Cx,
-        prev: &Self,
+        _prev: &Self,
         _id: &mut xilem_core::Id,
         _state: &mut Self::State,
         element: &mut Self::Element,
     ) -> ChangeFlags {
-        // could be a little bit less redundant...
-        let mut changeflags = ChangeFlags::empty();
-        if prev.text != self.text {
-            changeflags |= element.set_text(self.text.clone());
-        }
+        let mut changeflags = element.set_text(&self.text);
         if element.set_style(self.style) {
             changeflags |= ChangeFlags::PAINT;
         }
