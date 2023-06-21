@@ -1,4 +1,7 @@
-use super::{core::PaintCx, ChangeFlags, Event, EventCx, Pod, StyleableWidget, Widget};
+use super::{
+    core::{update_layout_node, PaintCx},
+    ChangeFlags, Event, EventCx, Pod, StyleableWidget, Widget,
+};
 use crate::view::Borders;
 use ratatui::{layout::Rect, style::Style, symbols};
 use taffy::tree::NodeId;
@@ -72,6 +75,7 @@ pub struct Block {
     pub(crate) content: Pod,
     borders: Borders,
     border_style: Style,
+    layout_style: taffy::style::Style,
     fill_with_bg: bool,
     inherit_style: bool,
 }
@@ -83,12 +87,27 @@ impl Block {
         border_style: Style,
         inherit_style: bool,
     ) -> Self {
+        let pad =
+            |b| taffy::style::LengthPercentage::Length(if borders.contains(b) { 1.0 } else { 0.0 });
         Block {
             content: Pod::new(content),
             borders,
             fill_with_bg: true,
             border_style,
             inherit_style,
+            layout_style: taffy::style::Style {
+                padding: taffy::prelude::Rect {
+                    left: pad(Borders::LEFT),
+                    right: pad(Borders::RIGHT),
+                    top: pad(Borders::TOP),
+                    bottom: pad(Borders::BOTTOM),
+                },
+                size: taffy::prelude::Size {
+                    width: taffy::style::Dimension::Percent(1.0),
+                    height: taffy::style::Dimension::Percent(1.0),
+                },
+                ..Default::default()
+            },
         }
     }
 
@@ -143,30 +162,16 @@ impl Widget for Block {
         self.content.paint(cx, cx.rect())
     }
 
-    fn layout(&mut self, cx: &mut super::LayoutCx, _prev: NodeId) -> NodeId {
-        let pad = |b| {
-            taffy::style::LengthPercentage::Length(if self.borders.contains(b) { 1.0 } else { 0.0 })
-        };
-
-        let border_style = taffy::style::Style {
-            padding: taffy::prelude::Rect {
-                left: pad(Borders::LEFT),
-                right: pad(Borders::RIGHT),
-                top: pad(Borders::TOP),
-                bottom: pad(Borders::BOTTOM),
-            },
-            size: taffy::prelude::Size {
-                width: taffy::style::Dimension::Percent(1.0),
-                height: taffy::style::Dimension::Percent(1.0),
-            },
-            ..Default::default()
-        };
-
-        // TODO diff children...
+    fn layout(&mut self, cx: &mut super::LayoutCx, prev: NodeId) -> NodeId {
         let content = self.content.layout(cx);
-        cx.taffy
-            .new_with_children(border_style, &[content])
-            .unwrap()
+        if !prev.is_null() {
+            update_layout_node(prev, cx.taffy, &[content], &self.layout_style);
+            prev
+        } else {
+            cx.taffy
+                .new_with_children(self.layout_style.clone(), &[content])
+                .unwrap()
+        }
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {

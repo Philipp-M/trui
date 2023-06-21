@@ -78,9 +78,6 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
         self.view = Some(view);
         let root_pod = self.root_pod.as_mut().unwrap();
 
-        // TODO rebuilding taffy everytime is quite slow
-        // this should be cached, and only the parts that actually changed should be updated...
-        self.taffy.clear();
         let cx_state = &mut CxState::new(&mut self.events);
         let mut layout_cx = LayoutCx {
             taffy: &mut self.taffy,

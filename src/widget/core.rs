@@ -230,7 +230,7 @@ impl WidgetState {
             // id,
             flags: PodFlags::INIT_FLAGS,
             rect: Default::default(),
-            layout_node: NodeId::new(0),
+            layout_node: NodeId::null(),
         }
     }
 
@@ -432,4 +432,33 @@ impl Widget for Box<dyn AnyWidget> {
 pub trait StyleableWidget {
     /// returns true, if it needs a repaint after setting the style (most of the time: style of the widget has changed)
     fn set_style(&mut self, style: ratatui::style::Style) -> bool;
+}
+
+// could probably be in taffy itself
+pub(crate) fn update_layout_node(
+    node: NodeId,
+    taffy: &mut taffy::Taffy,
+    children: &[NodeId],
+    style: &taffy::style::Style,
+) {
+    let style_changed = style != taffy.style(node).unwrap();
+    let all_children_equal = children.len() == taffy.child_count(node).unwrap()
+        && taffy::LayoutTree::children(taffy, node)
+            .zip(children.iter())
+            .all(|(old, new)| old == *new);
+    if all_children_equal && !style_changed {
+        return;
+    }
+    if !all_children_equal {
+        for n in taffy::LayoutTree::children(taffy, node)
+            .filter(|old_child| !children.contains(old_child))
+            .collect::<Vec<_>>()
+        {
+            taffy.remove(n).unwrap();
+        }
+        taffy.set_children(node, children).unwrap();
+    }
+    if style_changed {
+        taffy.set_style(node, style.clone()).unwrap();
+    }
 }

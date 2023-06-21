@@ -3,7 +3,10 @@ use std::cmp::max;
 use taffy::tree::NodeId;
 use unicode_width::UnicodeWidthStr;
 
-use super::{core::EventCx, ChangeFlags, Event, LayoutCx, PaintCx, StyleableWidget, Widget};
+use super::{
+    core::{update_layout_node, EventCx},
+    ChangeFlags, Event, LayoutCx, PaintCx, StyleableWidget, Widget,
+};
 
 pub struct Text {
     pub(crate) text: String,
@@ -68,11 +71,11 @@ impl Widget for Text {
             },
             ..Default::default()
         };
-        if !cx.taffy.contains(prev) {
-            cx.taffy.new_leaf(style).unwrap()
-        } else {
-            cx.taffy.set_style(prev, style).unwrap();
+        if !prev.is_null() {
+            update_layout_node(prev, cx.taffy, &[], &style);
             prev
+        } else {
+            cx.taffy.new_leaf(style).unwrap()
         }
     }
 

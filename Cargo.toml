@@ -8,7 +8,7 @@ edition = "2021"
 xilem_core = { git = "https://github.com/Philipp-M/xilem.git", branch = "fix-small-core-macro-issues" }
 crossterm = "0.26.1"
 rand = "0.8.5"
-taffy = { path = "../taffy" }
+taffy = { git = "https://github.com/Philipp-M/taffy.git", branch = "null-node" }
 anyhow = "1.0"
 # update this when a new release occurs
 ratatui = { git = "https://github.com/tui-rs-revival/ratatui.git" }

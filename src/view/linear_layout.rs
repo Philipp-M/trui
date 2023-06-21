@@ -20,10 +20,7 @@ impl<T, A, VT: ViewSequence<T, A>> View<T, A> for LinearLayout<T, A, VT> {
     fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Element) {
         let mut elements = vec![];
         let (id, state) = cx.with_new_id(|cx| self.children.build(cx, &mut elements));
-        let column = widget::LinearLayout {
-            children: elements,
-            direction: self.direction,
-        };
+        let column = widget::LinearLayout::new(elements, self.direction);
         (id, state, column)
     }
 

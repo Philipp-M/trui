@@ -270,6 +270,7 @@ checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 [[package]]
 name = "taffy"
 version = "0.3.11"
+source = "git+https://github.com/Philipp-M/taffy.git?branch=null-node#67d1ca84ac39fe2723c21bf3ce7468d2b079b40b"
 dependencies = [
  "arrayvec",
  "grid",
