@@ -4,11 +4,11 @@ mod events;
 mod linear_layout;
 mod text;
 
-pub(crate) use self::core::WidgetState;
 pub use self::core::{
     AnyWidget, ChangeFlags, CxState, Event, EventCx, LayoutCx, PaintCx, Pod, Point,
     StyleableWidget, Widget,
 };
+pub(crate) use self::core::{PodFlags, WidgetState};
 pub use block::Block;
 pub use events::*;
 pub use linear_layout::LinearLayout;

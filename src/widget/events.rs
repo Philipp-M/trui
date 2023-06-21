@@ -97,7 +97,7 @@ impl<E: Widget> Widget for OnHover<E> {
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
         self.element.event(cx, event);
 
-        if matches!(event, Event::Mouse(_)) {
+        if matches!(event, Event::Mouse(_) | Event::FocusLost) {
             if cx.is_hot() && !self.is_hovering {
                 self.is_hovering = true;
                 cx.add_message(Message::new(self.id_path.clone(), ()));
@@ -136,7 +136,7 @@ impl<E: Widget> Widget for OnHoverLost<E> {
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
         self.element.event(cx, event);
 
-        if matches!(event, Event::Mouse(_)) {
+        if matches!(event, Event::Mouse(_) | Event::FocusLost) {
             if cx.is_hot() && !self.is_hovering {
                 self.is_hovering = true;
             } else if !cx.is_hot() && self.is_hovering {
@@ -149,12 +149,17 @@ impl<E: Widget> Widget for OnHoverLost<E> {
 
 pub struct StyleOnHover<E> {
     pub element: E,
+    is_hovering: bool,
     style: Style,
 }
 
 impl<E> StyleOnHover<E> {
     pub fn new(element: E, style: Style) -> Self {
-        StyleOnHover { element, style }
+        StyleOnHover {
+            element,
+            style,
+            is_hovering: false,
+        }
     }
 }
 
@@ -172,6 +177,13 @@ impl<E: Widget + StyleableWidget> Widget for StyleOnHover<E> {
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
         self.element.event(cx, event);
+        if cx.is_hot() && !self.is_hovering {
+            cx.request_paint();
+            self.is_hovering = true;
+        } else if !cx.is_hot() && self.is_hovering {
+            cx.request_paint();
+            self.is_hovering = false;
+        }
     }
 }
 
@@ -215,21 +227,23 @@ impl<E: Widget + StyleableWidget> Widget for StyleOnPressed<E> {
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
         self.element.event(cx, event);
 
-        if let Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            ..
-        }) = event
-        {
-            cx.set_active(cx.is_hot());
-        }
-
-        // TODO handle other events like e.g. FocusLost
-        if let Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Up(MouseButton::Left),
-            ..
-        }) = event
-        {
-            cx.set_active(false);
+        match event {
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                ..
+            }) => {
+                cx.request_paint();
+                cx.set_active(cx.is_hot());
+            }
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Up(MouseButton::Left) | MouseEventKind::Moved,
+                ..
+            })
+            | Event::FocusLost => {
+                cx.request_paint();
+                cx.set_active(false);
+            }
+            _ => (),
         }
     }
 }

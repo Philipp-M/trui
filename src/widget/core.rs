@@ -11,8 +11,9 @@ pub enum Event {
     // TODO create a custom type...
     Mouse(MouseEvent),
     Key(KeyEvent),
-    // FocusLost,
-    // Resize { width: u16, height: u16 }, // TODO should trigger relayout (currently layout runs at every event...)
+    FocusLost,
+    FocusGained,
+    Resize { width: u16, height: u16 },
 }
 
 /// Static state that is shared between most contexts.
@@ -40,7 +41,8 @@ pub struct LayoutCx<'a, 'b> {
 
 pub struct PaintCx<'a, 'b> {
     pub(crate) cx_state: &'a mut CxState<'b>,
-    pub(crate) widget_state: &'a WidgetState,
+    // TODO mutable? (xilem doesn't do this, but I think there are use cases for this...)
+    pub(crate) widget_state: &'a mut WidgetState,
     pub(crate) terminal: &'a mut Terminal<CrosstermBackend<Stdout>>,
     pub(crate) taffy: &'a mut Taffy,
     // TODO this kinda feels hacky, find a better solution for this issue:
@@ -94,6 +96,13 @@ impl_context_method!(EventCx<'_, '_>, LayoutCx<'_, '_>, PaintCx<'_, '_>, {
     /// [`active`]: Pod::is_active
     pub fn has_active(&self) -> bool {
         self.widget_state.flags.contains(PodFlags::HAS_ACTIVE)
+    }
+
+    /// Requests a call to [`paint`] for this widget.
+    ///
+    /// [`paint`]: super::Widget::paint
+    pub fn request_paint(&mut self) {
+        self.widget_state.flags |= PodFlags::REQUEST_PAINT;
     }
 });
 
@@ -234,11 +243,11 @@ impl WidgetState {
         }
     }
 
-    fn request(&mut self, flags: PodFlags) {
+    pub(crate) fn request(&mut self, flags: PodFlags) {
         self.flags |= flags
     }
 
-    fn merge_up(&mut self, child_state: &mut WidgetState) {
+    pub(crate) fn merge_up(&mut self, child_state: &mut WidgetState) {
         self.flags |= child_state.flags.upwards();
     }
 }
@@ -288,6 +297,10 @@ impl Pod {
             taffy: cx.taffy,
         };
         self.state.layout_node = self.widget.layout(inner_cx, node);
+        self.state.flags.remove(PodFlags::REQUEST_LAYOUT);
+        // TODO currently this is only relevant here, but this may change in the future...
+        self.state.flags.remove(PodFlags::TREE_CHANGED);
+        cx.widget_state.merge_up(&mut self.state);
         self.state.layout_node
     }
 
@@ -313,7 +326,9 @@ impl Pod {
             terminal: cx.terminal,
             override_style: cx.override_style,
         };
-        self.widget.paint(inner_cx)
+        self.widget.paint(inner_cx);
+
+        self.state.flags.remove(PodFlags::REQUEST_PAINT);
     }
 
     // Return true if hot state has changed
@@ -361,7 +376,23 @@ impl Pod {
                             mouse_event.kind,
                             MouseEventKind::Moved | MouseEventKind::Drag(_)
                         ))
-                // TODO this is not optimal yet...
+            }
+            Event::Resize { .. } => {
+                // TODO for now request repaint and relayout for resize events for *every* widget,
+                // this may change in the future to be more finegrained (and efficient)
+                self.state
+                    .request(PodFlags::REQUEST_PAINT | PodFlags::REQUEST_LAYOUT);
+                true
+            }
+            Event::FocusLost => {
+                // right now a FocusLost event will disable any ongoing pointer events,
+                // since we can't really track if the state has changed in the meantime.
+                // There may be workarounds/hacks to remember the previous mouse state (mostly),
+                // but I think it's safer for now to just tell every widget, that there isn't a mouse anymore in focus...
+                self.state
+                    .flags
+                    .set(PodFlags::IS_HOT | PodFlags::IS_ACTIVE, false);
+                true
             }
             _ => return,
         };

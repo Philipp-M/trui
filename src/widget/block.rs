@@ -123,7 +123,7 @@ impl Block {
     pub fn set_inherit_style(&mut self, inherit: bool) -> ChangeFlags {
         if self.inherit_style != inherit {
             self.inherit_style = inherit;
-            ChangeFlags::LAYOUT | ChangeFlags::PAINT
+            ChangeFlags::PAINT
         } else {
             ChangeFlags::empty()
         }

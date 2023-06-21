@@ -1,11 +1,14 @@
 use crate::{
     view::{Cx, View},
-    widget::{CxState, Event, EventCx, LayoutCx, PaintCx, Pod, WidgetState},
+    widget::{CxState, Event, EventCx, LayoutCx, PaintCx, Pod, PodFlags, WidgetState},
 };
 use anyhow::Result;
 use crossterm::{
     cursor,
-    event::{read, DisableMouseCapture, EnableMouseCapture, KeyCode, KeyEvent},
+    event::{
+        read, DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture,
+        KeyCode, KeyEvent,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -48,7 +51,8 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
         }
     }
 
-    fn render(&mut self, width: u16, height: u16) {
+    /// returns true if it has repainted (i.e. needs to swap the buffers)
+    fn render(&mut self, width: u16, height: u16) -> bool {
         let view = (self.app_logic)(&mut self.data);
 
         let mut cx = Cx::default();
@@ -79,40 +83,51 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
         let root_pod = self.root_pod.as_mut().unwrap();
 
         let cx_state = &mut CxState::new(&mut self.events);
-        let mut layout_cx = LayoutCx {
-            taffy: &mut self.taffy,
-            widget_state: &mut self.root_state,
-            cx_state,
-        };
 
-        let layout_node = root_pod.layout(&mut layout_cx);
-        self.taffy
-            .compute_layout(
-                layout_node,
-                taffy::prelude::Size {
-                    width: AvailableSpace::Definite(width as f32),
-                    height: AvailableSpace::Definite(height as f32),
+        if root_pod
+            .state
+            .flags
+            .intersects(PodFlags::REQUEST_LAYOUT | PodFlags::TREE_CHANGED)
+        {
+            let mut layout_cx = LayoutCx {
+                taffy: &mut self.taffy,
+                widget_state: &mut self.root_state,
+                cx_state,
+            };
+            let layout_node = root_pod.layout(&mut layout_cx);
+            self.taffy
+                .compute_layout(
+                    layout_node,
+                    taffy::prelude::Size {
+                        width: AvailableSpace::Definite(width as f32),
+                        height: AvailableSpace::Definite(height as f32),
+                    },
+                )
+                .ok();
+        }
+
+        if root_pod.state.flags.intersects(PodFlags::REQUEST_PAINT) {
+            let mut paint_cx = PaintCx {
+                widget_state: &mut self.root_state,
+                cx_state,
+                terminal: &mut self.terminal,
+                taffy: &mut self.taffy,
+                override_style: ratatui::style::Style::default(),
+            };
+
+            root_pod.paint(
+                &mut paint_cx,
+                Rect {
+                    x: 0,
+                    y: 0,
+                    width,
+                    height,
                 },
-            )
-            .ok();
-
-        let mut paint_cx = PaintCx {
-            widget_state: &mut self.root_state,
-            cx_state,
-            terminal: &mut self.terminal,
-            taffy: &mut self.taffy,
-            override_style: ratatui::style::Style::default(),
-        };
-
-        root_pod.paint(
-            &mut paint_cx,
-            Rect {
-                x: 0,
-                y: 0,
-                width,
-                height,
-            },
-        );
+            );
+            true
+        } else {
+            false
+        }
     }
 
     pub fn run(mut self) -> Result<()> {
@@ -120,6 +135,7 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
         execute!(
             stdout(),
             EnterAlternateScreen,
+            EnableFocusChange,
             EnableMouseCapture,
             cursor::Hide
         )?;
@@ -129,10 +145,12 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
         loop {
             self.terminal.autoresize()?;
             let size = self.terminal.size()?;
-            self.render(size.width, size.height);
-            self.terminal.flush()?;
-            self.terminal.swap_buffers();
-            self.terminal.backend_mut().flush()?;
+            let needs_update = self.render(size.width, size.height);
+            if needs_update {
+                self.terminal.flush()?;
+                self.terminal.swap_buffers();
+                self.terminal.backend_mut().flush()?;
+            }
 
             let event = match read()? {
                 crossterm::event::Event::Key(KeyEvent {
@@ -140,6 +158,10 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
                 }) => break,
                 crossterm::event::Event::Key(key_event) => Event::Key(key_event),
                 crossterm::event::Event::Mouse(mouse_event) => Event::Mouse(mouse_event),
+                crossterm::event::Event::FocusGained => Event::FocusGained,
+                crossterm::event::Event::FocusLost => Event::FocusLost,
+                // crossterm::event::Event::Paste(_) => todo!(),
+                crossterm::event::Event::Resize(width, height) => Event::Resize { width, height },
                 _ => continue, // TODO handle other kinds of events
             };
 
@@ -170,6 +192,7 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
             stdout(),
             cursor::Show,
             LeaveAlternateScreen,
+            DisableFocusChange,
             DisableMouseCapture
         )?;
         disable_raw_mode()?;
