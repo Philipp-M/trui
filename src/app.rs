@@ -13,9 +13,28 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
-use std::io::{stdout, Stdout, Write};
+use std::{
+    io::{stdout, Stdout, Write},
+    path::PathBuf,
+};
 use taffy::{style::AvailableSpace, Taffy};
+use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
 use xilem_core::{Id, Message};
+
+// TODO less hardcoding and cross-platform support
+fn setup_logging(log_level: tracing::Level) -> Result<tracing_appender::non_blocking::WorkerGuard> {
+    let cache_dir = PathBuf::from(std::env::var_os("HOME").unwrap()).join(".cache/trui");
+    let tracing_file_appender = tracing_appender::rolling::never(cache_dir, "trui.log");
+    let (tracing_file_writer, guard) = tracing_appender::non_blocking(tracing_file_appender);
+
+    let subscriber = Registry::default().with(
+        tracing_subscriber::fmt::Layer::default()
+            .with_writer(tracing_file_writer.with_max_level(log_level)),
+    );
+    tracing::subscriber::set_global_default(subscriber)?;
+
+    Ok(guard)
+}
 
 pub struct App<T: 'static, V: View<T> + 'static, F: FnMut(&mut T) -> V> {
     app_logic: F,
@@ -52,6 +71,7 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
     }
 
     /// returns true if it has repainted (i.e. needs to swap the buffers)
+    #[tracing::instrument(skip(self))]
     fn render(&mut self, width: u16, height: u16) -> bool {
         let view = (self.app_logic)(&mut self.data);
 
@@ -68,7 +88,8 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
                     .expect("the root widget changed its type, this should never happen!"),
             );
 
-            let _ = self.root_pod.as_mut().unwrap().mark(changes);
+            let changes = self.root_pod.as_mut().unwrap().mark(changes);
+            tracing::debug!("changes after view rebuild: {changes:?}");
             assert!(self.cx.is_empty(), "id path imbalance on rebuild");
         } else {
             let (id, state, element) = view.build(&mut self.cx);
@@ -89,6 +110,7 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
             .flags
             .intersects(PodFlags::REQUEST_LAYOUT | PodFlags::TREE_CHANGED)
         {
+            let _ = tracing::debug_span!("compute layout");
             let mut layout_cx = LayoutCx {
                 taffy: &mut self.taffy,
                 widget_state: &mut self.root_state,
@@ -106,7 +128,9 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
                 .ok();
         }
 
-        if root_pod.state.flags.intersects(PodFlags::REQUEST_PAINT) {
+        let needs_paint = root_pod.state.flags.intersects(PodFlags::REQUEST_PAINT);
+        if needs_paint {
+            let _paint_span = tracing::debug_span!("paint");
             let mut paint_cx = PaintCx {
                 widget_state: &mut self.root_state,
                 cx_state,
@@ -124,13 +148,13 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
                     height,
                 },
             );
-            true
-        } else {
-            false
         }
+        needs_paint
     }
 
     pub fn run(mut self) -> Result<()> {
+        let _guard = setup_logging(tracing::Level::DEBUG)?;
+
         enable_raw_mode()?;
         execute!(
             stdout(),
@@ -142,6 +166,7 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
 
         self.terminal.clear()?;
 
+        let span = tracing::debug_span!("main loop");
         loop {
             self.terminal.autoresize()?;
             let size = self.terminal.size()?;
@@ -187,6 +212,7 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> App<T, V, F> {
                 );
             }
         }
+        drop(span);
 
         execute!(
             stdout(),
