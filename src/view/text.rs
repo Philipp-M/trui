@@ -2,6 +2,7 @@ use super::{common::Styleable, Cx, View, ViewMarker};
 use crate::widget::{self, ChangeFlags, StyleableWidget};
 use ratatui::style::{Color, Modifier, Style};
 use std::marker::PhantomData;
+use unicode_segmentation::UnicodeSegmentation;
 
 impl ViewMarker for &str {}
 
@@ -93,6 +94,7 @@ impl<T, A> From<String> for Text<T, A> {
     }
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Text<T = (), A = ()> {
     text: String,
     style: Style,
@@ -190,5 +192,90 @@ impl<T, A> Styleable<T, A> for Text<T, A> {
 
     fn current_style(&self) -> Style {
         self.style
+    }
+}
+
+pub struct WrappedText<T, A> {
+    words: Vec<(String, Style)>,
+    phantom: PhantomData<fn() -> (T, A)>,
+}
+
+pub trait ToWrappedText<T, A> {
+    fn wrapped(self) -> WrappedText<T, A>;
+}
+
+impl<S, A, T: Into<Text<S, A>>> ToWrappedText<S, A> for T {
+    fn wrapped(self) -> WrappedText<S, A> {
+        let text = self.into();
+        WrappedText {
+            words: text
+                .text
+                .split_word_bounds()
+                .map(|s| (s.into(), text.style))
+                .collect(),
+            phantom: PhantomData,
+        }
+        // WrappedText { text: vec![self.into()] }
+    }
+}
+
+// TODO maybe extend this for bigger tuples as well with a macro...
+impl<S, A, T1: Into<Text<S, A>>, T2: Into<Text<S, A>>> ToWrappedText<S, A> for (T1, T2) {
+    fn wrapped(self) -> WrappedText<S, A> {
+        let mut words = Vec::new();
+        let text = self.0.into();
+        for w in text
+            .text
+            .split_word_bounds()
+            .map(|s| (s.into(), text.style))
+        {
+            words.push(w);
+        }
+        let text = self.1.into();
+        for w in text
+            .text
+            .split_word_bounds()
+            .map(|s| (s.into(), text.style))
+        {
+            words.push(w);
+        }
+        WrappedText {
+            words,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<T, A> ViewMarker for WrappedText<T, A> {}
+
+impl<T, A> View<T, A> for WrappedText<T, A> {
+    type State = ();
+
+    type Element = widget::WrappedText;
+
+    fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
+        let (id, element) = cx.with_new_id(|_| widget::WrappedText::new(self.words.clone()));
+        (id, (), element)
+    }
+
+    fn rebuild(
+        &self,
+        _cx: &mut Cx,
+        _prev: &Self,
+        _id: &mut xilem_core::Id,
+        _state: &mut Self::State,
+        element: &mut Self::Element,
+    ) -> ChangeFlags {
+        element.set_words(&self.words)
+    }
+
+    fn message(
+        &self,
+        _id_path: &[xilem_core::Id],
+        _state: &mut Self::State,
+        message: Box<dyn std::any::Any>,
+        _app_state: &mut T,
+    ) -> xilem_core::MessageResult<A> {
+        xilem_core::MessageResult::Stale(message)
     }
 }

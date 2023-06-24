@@ -9,8 +9,8 @@ pub use self::core::{
     StyleableWidget, Widget,
 };
 pub(crate) use self::core::{PodFlags, WidgetState};
-pub use block::Block;
-pub use events::*;
-pub use linear_layout::LinearLayout;
+pub(crate) use block::Block;
+pub(crate) use events::*;
+pub(crate) use linear_layout::LinearLayout;
 pub use ratatui::layout::Rect;
-pub use text::Text;
+pub(crate) use text::*;

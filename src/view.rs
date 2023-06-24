@@ -14,4 +14,4 @@ pub use block::{block, Block};
 pub use common::{Borders, Styleable};
 pub use events::*;
 pub use linear_layout::{h_stack, v_stack, LinearLayout};
-pub use text::Text;
+pub use text::*;
