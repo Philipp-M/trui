@@ -1,5 +1,4 @@
 use ratatui::style::Style;
-use std::cmp::max;
 use taffy::tree::NodeId;
 use unicode_width::UnicodeWidthStr;
 
@@ -42,23 +41,21 @@ impl Widget for Text {
 
         let style = self.style.patch(cx.override_style);
 
-        cx.terminal.current_buffer_mut().set_stringn(
-            rect.x,
-            rect.y,
-            &self.text,
-            rect.width.into(),
-            style,
-        );
+        let term_size = cx.terminal.size().unwrap();
+
+        let max_width = rect.width.min(term_size.width.saturating_sub(rect.x)) as usize;
+        if rect.height > 0 && max_width > 0 && rect.y < term_size.height {
+            cx.terminal
+                .current_buffer_mut()
+                .set_stringn(rect.x, rect.y, &self.text, max_width, style);
+        }
     }
 
     fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
-        let (min_x, min_y) = self.text.lines().fold((0, 0), |(min_x, min_y), l| {
-            (max(min_x, l.width()), min_y + 1)
-        });
         let style = taffy::style::Style {
             min_size: taffy::prelude::Size {
-                width: taffy::style::Dimension::Length(min_x as f32),
-                height: taffy::style::Dimension::Length(min_y as f32),
+                width: taffy::style::Dimension::Auto,
+                height: taffy::style::Dimension::Length(1.0), // new lines seem to be ignored by the ratatui string functions
             },
             size: taffy::prelude::Size {
                 width: taffy::style::Dimension::Percent(1.0),
@@ -121,13 +118,13 @@ impl Widget for WrappedText {
             let layout = cx.taffy.layout(*node).unwrap();
             let x = rect.x + (layout.location.x as u16);
             let y = rect.y + (layout.location.y as u16);
+            let term_size = cx.terminal.size().unwrap();
 
             let max_width = rect
                 .width
                 .saturating_sub(layout.location.x as u16)
-                .min(cx.terminal.size().unwrap().width.saturating_sub(x))
-                as usize;
-            if max_width > 0 {
+                .min(term_size.width.saturating_sub(x)) as usize;
+            if max_width > 0 && y < term_size.height {
                 let style = style.patch(cx.override_style);
                 cx.terminal
                     .current_buffer_mut()
