@@ -107,6 +107,7 @@ impl Block {
         border_styles: BorderStyles,
         style: Style,
         inherit_style: bool,
+        fill_with_bg: bool,
     ) -> Self {
         let pad = |b| {
             taffy::style::LengthPercentage::Length(if border_styles.has_borders(b) {
@@ -117,7 +118,7 @@ impl Block {
         };
         Block {
             content: Pod::new(content),
-            fill_with_bg: true,
+            fill_with_bg,
             style,
             inherit_style,
             layout_style: taffy::style::Style {
@@ -142,6 +143,15 @@ impl Block {
             self.border_styles = border_style.clone();
             // TODO more sophisticated check for needed ChangeFlags (specifically layout)
             ChangeFlags::LAYOUT | ChangeFlags::PAINT
+        } else {
+            ChangeFlags::empty()
+        }
+    }
+
+    pub(crate) fn set_fill_with_bg(&mut self, fill_with_bg: bool) -> ChangeFlags {
+        if self.fill_with_bg != fill_with_bg {
+            self.fill_with_bg = fill_with_bg;
+            ChangeFlags::PAINT
         } else {
             ChangeFlags::empty()
         }

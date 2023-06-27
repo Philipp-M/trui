@@ -36,6 +36,7 @@ where
                     self.border_styles.clone(),
                     self.style,
                     self.inherit_style,
+                    self.fill_with_bg,
                 ),
             )
         });
@@ -56,6 +57,7 @@ where
             changeflags |= ChangeFlags::PAINT;
         }
         changeflags |= element.set_inherit_style(self.inherit_style);
+        changeflags |= element.set_fill_with_bg(self.fill_with_bg);
 
         let element = element
             .content
