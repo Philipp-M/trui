@@ -1,7 +1,8 @@
 use anyhow::Result;
 use ratatui::style::Color;
 use trui::{
-    block, v_stack, AnyView, App, BoxedView, Clickable, Hoverable, Styleable, View, ViewMarker,
+    block, v_stack, AnyView, App, BorderKind, Borders, BoxedView, Clickable, Hoverable, Styleable,
+    View, ViewMarker,
 };
 
 // TODO this basic logic (hover, styling etc.) should probably be its own widget (state)...
@@ -13,6 +14,7 @@ pub fn button<T>(
     hover_lost_cb: impl Fn(&mut T) + Send,
 ) -> impl View<T> + ViewMarker + Styleable<T> {
     block(label.into())
+        .with_borders(Borders::ALL)
         .fg(block_color)
         .on_click(click_cb)
         .on_hover(hover_cb)
@@ -41,7 +43,10 @@ pub fn rainbow_blocks<T: 'static>(content: impl BoxedView<T>, count: usize) -> B
     let mut view = content.boxed();
     for i in 0..count {
         let color = rainbow((i as f32 / (count - 1) as f32 + 0.001).max(0.0).min(1.0));
-        view = block(view).fg(color).boxed();
+        view = block(view)
+            .with_borders(BorderKind::Rounded)
+            .fg(color)
+            .boxed();
     }
     view
 }
@@ -103,6 +108,7 @@ fn main() -> Result<()> {
                 ),
                 // this is (almost) the equivalent...
                 block(v)
+                    .with_borders(BorderKind::DoubleStraight)
                     .fg(state.current_button_color2)
                     .on_click(|state: &mut AppState| {
                         state.current_button_color2 = Color::Red;

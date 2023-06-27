@@ -133,14 +133,8 @@ impl<T, A, V> Block<T, A, V> {
         self
     }
 
-    // keep it simple for now, but the future offers: extension traits!
-    pub fn with_borders(mut self, borders: Borders, style: Style, kind: BorderKind) -> Self {
-        self.border_styles.0.push(BorderStyle {
-            add_borders: borders,
-            sub_borders: Borders::NONE,
-            style,
-            kind: Some(kind),
-        });
+    pub fn with_borders(mut self, style: impl Into<BorderStyle>) -> Self {
+        self.border_styles.0.push(style.into());
         self
     }
 
@@ -166,7 +160,151 @@ pub fn block<T, A, V>(content: V) -> Block<T, A, V> {
         fill_with_bg: true,
     }
 }
-
 pub fn bordered_block<T, A, V>(content: V) -> Block<T, A, V> {
-    block(content).with_borders(Borders::ALL, Style::default(), BorderKind::Rounded)
+    block(content).with_borders(Borders::ALL)
+}
+
+// A few From implementations for convenient use with `Block::with_borders()`
+// TODO maybe macros may help reducing the boilerplate below...
+
+impl From<()> for BorderStyle {
+    fn from(_: ()) -> Self {
+        Borders::ALL.into()
+    }
+}
+
+impl From<Borders> for BorderStyle {
+    fn from(borders: Borders) -> Self {
+        BorderStyle {
+            add_borders: borders,
+            ..Default::default()
+        }
+    }
+}
+
+// TODO enable all borders?
+impl From<Style> for BorderStyle {
+    fn from(style: Style) -> Self {
+        BorderStyle {
+            add_borders: Borders::ALL,
+            style,
+            ..Default::default()
+        }
+    }
+}
+
+impl From<BorderKind> for BorderStyle {
+    fn from(kind: BorderKind) -> Self {
+        BorderStyle {
+            add_borders: Borders::ALL,
+            kind: Some(kind),
+            ..Default::default()
+        }
+    }
+}
+
+impl From<(Borders, Style)> for BorderStyle {
+    fn from((borders, style): (Borders, Style)) -> Self {
+        BorderStyle {
+            add_borders: borders,
+            style,
+            ..Default::default()
+        }
+    }
+}
+
+impl From<(Style, Borders)> for BorderStyle {
+    fn from((style, borders): (Style, Borders)) -> Self {
+        BorderStyle {
+            add_borders: borders,
+            style,
+            ..Default::default()
+        }
+    }
+}
+
+impl From<(Borders, BorderKind)> for BorderStyle {
+    fn from((borders, kind): (Borders, BorderKind)) -> Self {
+        BorderStyle {
+            add_borders: borders,
+            kind: Some(kind),
+            ..Default::default()
+        }
+    }
+}
+
+impl From<(BorderKind, Borders)> for BorderStyle {
+    fn from((kind, borders): (BorderKind, Borders)) -> Self {
+        BorderStyle {
+            add_borders: borders,
+            kind: Some(kind),
+            ..Default::default()
+        }
+    }
+}
+
+impl From<(Style, Borders, BorderKind)> for BorderStyle {
+    fn from((style, borders, kind): (Style, Borders, BorderKind)) -> Self {
+        BorderStyle {
+            add_borders: borders,
+            sub_borders: Borders::NONE,
+            style,
+            kind: Some(kind),
+        }
+    }
+}
+
+impl From<(Borders, Style, BorderKind)> for BorderStyle {
+    fn from((borders, style, kind): (Borders, Style, BorderKind)) -> Self {
+        BorderStyle {
+            add_borders: borders,
+            sub_borders: Borders::NONE,
+            style,
+            kind: Some(kind),
+        }
+    }
+}
+
+impl From<(Borders, BorderKind, Style)> for BorderStyle {
+    fn from((borders, kind, style): (Borders, BorderKind, Style)) -> Self {
+        BorderStyle {
+            add_borders: borders,
+            sub_borders: Borders::NONE,
+            style,
+            kind: Some(kind),
+        }
+    }
+}
+
+impl From<(BorderKind, Borders, Style)> for BorderStyle {
+    fn from((kind, borders, style): (BorderKind, Borders, Style)) -> Self {
+        BorderStyle {
+            add_borders: borders,
+            sub_borders: Borders::NONE,
+            style,
+            kind: Some(kind),
+        }
+    }
+}
+
+impl From<(BorderKind, Style, Borders)> for BorderStyle {
+    fn from((kind, style, borders): (BorderKind, Style, Borders)) -> Self {
+        BorderStyle {
+            add_borders: borders,
+            sub_borders: Borders::NONE,
+            style,
+            kind: Some(kind),
+        }
+    }
+}
+
+impl From<(Style, BorderKind, Borders)> for BorderStyle {
+    fn from((style, kind, borders): (Style, BorderKind, Borders)) -> Self {
+        BorderStyle {
+            add_borders: borders,
+            sub_borders: Borders::NONE,
+            style,
+            kind: Some(kind),
+        }
+    }
 }

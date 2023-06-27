@@ -7,6 +7,7 @@ pub fn button<T: 'static>(
     click_cb: impl Fn(&mut T) + Send + 'static,
 ) -> impl View<T> + ViewMarker {
     block(content.boxed())
+        .with_borders(BorderKind::ThickStraight)
         .on_hover_style(Style::default().fg(Color::Green).bg(Color::LightYellow))
         .on_pressed_fg(Color::Blue)
         .on_click(click_cb)
