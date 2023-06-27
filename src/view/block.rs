@@ -2,15 +2,15 @@ use std::marker::PhantomData;
 
 use crate::widget::{self, ChangeFlags, StyleableWidget};
 
-use super::{Borders, Cx, Styleable, View, ViewMarker};
+use super::{BorderKind, BorderStyle, BorderStyles, Borders, Cx, Styleable, View, ViewMarker};
 use ratatui::style::{Color, Style};
 use xilem_core::MessageResult;
 
 pub struct Block<T, A, V> {
     content: V,
-    borders: Borders,
     phantom: PhantomData<fn() -> (T, A)>,
-    border_style: Style,
+    border_styles: BorderStyles,
+    style: Style, // base style, merged on top of border style currently (overrides attributes if they are defined in border_style)
     fill_with_bg: bool,
     inherit_style: bool,
 }
@@ -31,7 +31,12 @@ where
             let (child_id, state, element) = self.content.build(cx);
             (
                 (state, child_id),
-                widget::Block::new(element, self.borders, self.border_style, self.inherit_style),
+                widget::Block::new(
+                    element,
+                    self.border_styles.clone(),
+                    self.style,
+                    self.inherit_style,
+                ),
             )
         });
         (id, state, element)
@@ -46,8 +51,8 @@ where
         element: &mut Self::Element,
     ) -> crate::widget::ChangeFlags {
         let mut changeflags = ChangeFlags::empty();
-        changeflags |= element.set_borders(self.borders);
-        if element.set_style(self.border_style) {
+        changeflags |= element.set_border_style(&self.border_styles);
+        if element.set_style(self.style) {
             changeflags |= ChangeFlags::PAINT;
         }
         changeflags |= element.set_inherit_style(self.inherit_style);
@@ -91,26 +96,26 @@ where
     type Output = Self;
 
     fn fg(mut self, color: Color) -> Self::Output {
-        self.border_style.fg = Some(color);
+        self.style.fg = Some(color);
         self
     }
 
     fn bg(mut self, color: Color) -> Self::Output {
-        self.border_style.bg = Some(color);
+        self.style.bg = Some(color);
         self
     }
 
     fn modifier(self, modifier: ratatui::style::Modifier) -> Self::Output {
-        self.border_style.add_modifier(modifier);
+        self.style.add_modifier(modifier);
         self
     }
 
     fn current_style(&self) -> Style {
-        self.border_style
+        self.style
     }
 
     fn style(mut self, style: Style) -> Self::Output {
-        self.border_style = style;
+        self.style = style;
         self
     }
 }
@@ -125,15 +130,41 @@ impl<T, A, V> Block<T, A, V> {
         self.fill_with_bg = fill;
         self
     }
+
+    // keep it simple for now, but the future offers: extension traits!
+    pub fn with_borders(mut self, borders: Borders, style: Style, kind: BorderKind) -> Self {
+        self.border_styles.0.push(BorderStyle {
+            add_borders: borders,
+            sub_borders: Borders::NONE,
+            style,
+            kind: Some(kind),
+        });
+        self
+    }
+
+    /// reverse previously applied borders
+    pub fn without_borders(mut self, borders: Borders) -> Self {
+        self.border_styles.0.push(BorderStyle {
+            add_borders: Borders::NONE,
+            sub_borders: borders,
+            style: Style::default(),
+            kind: None,
+        });
+        self
+    }
 }
 
 pub fn block<T, A, V>(content: V) -> Block<T, A, V> {
     Block {
         content,
-        borders: Borders::ALL,
         phantom: PhantomData,
-        border_style: Style::default(),
+        border_styles: Default::default(),
+        style: Style::default(),
         inherit_style: false,
         fill_with_bg: true,
     }
+}
+
+pub fn bordered_block<T, A, V>(content: V) -> Block<T, A, V> {
+    block(content).with_borders(Borders::ALL, Style::default(), BorderKind::Rounded)
 }

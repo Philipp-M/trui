@@ -2,61 +2,82 @@ use super::{
     core::{update_layout_node, PaintCx},
     ChangeFlags, Event, EventCx, Pod, StyleableWidget, Widget,
 };
-use crate::view::Borders;
+use crate::view::{BorderStyles, Borders};
 use ratatui::{layout::Rect, style::Style, symbols};
 use taffy::tree::NodeId;
 
-pub fn render_border(cx: &mut PaintCx, r: Rect, borders: Borders, style: Style) {
+pub(crate) fn render_border(cx: &mut PaintCx, r: Rect, border_styles: &BorderStyles, style: Style) {
+    use Borders as B; // unfortunately not possible to wildcard import since it's not an enum...
     if r.width == 0 || r.height == 0 {
         return;
     }
     let buf = cx.terminal.current_buffer_mut();
 
-    let mut draw = |x, y, s| {
+    let mut draw = |x, y, symbol, style| {
         if buf.area.x + x < buf.area.width && buf.area.y + y < buf.area.height {
-            buf.get_mut(x, y).set_symbol(s).set_style(style);
+            buf.get_mut(x, y).set_symbol(symbol).set_style(style);
         }
     };
+
     if r.width == 1 && r.height == 1 {
-        draw(r.x, r.y, symbols::DOT);
+        let style = border_styles.style(B::ALL).patch(style);
+        draw(r.x, r.y, symbols::DOT, style);
         return;
     }
-    if r.width > 1 && borders.intersects(Borders::HORIZONTAL) {
+
+    if r.width > 1 && border_styles.has_borders(B::TOP) {
+        let style = border_styles.style(B::TOP).patch(style);
+        let symbol = border_styles.symbols(B::TOP).horizontal;
         for x in r.x..(r.x + r.width) {
-            if borders.contains(Borders::TOP) {
-                draw(x, r.y, symbols::line::HORIZONTAL);
-            }
-            if borders.contains(Borders::BOTTOM) {
-                draw(x, r.y + r.height - 1, symbols::line::HORIZONTAL);
-            }
+            draw(x, r.y, symbol, style);
         }
     }
-    if r.height > 1 && borders.intersects(Borders::VERTICAL) {
+
+    if r.width > 1 && border_styles.has_borders(B::BOTTOM) {
+        let style = border_styles.style(B::BOTTOM).patch(style);
+        let symbol = border_styles.symbols(B::BOTTOM).horizontal;
+        for x in r.x..(r.x + r.width) {
+            draw(x, r.y + r.height - 1, symbol, style);
+        }
+    }
+
+    if r.height > 1 && border_styles.has_borders(B::LEFT) {
+        let style = border_styles.style(B::LEFT).patch(style);
+        let symbol = border_styles.symbols(B::LEFT).vertical;
         for y in r.y..(r.y + r.height) {
-            if borders.contains(Borders::LEFT) {
-                draw(r.x, y, symbols::line::VERTICAL);
-            }
-            if borders.contains(Borders::RIGHT) {
-                draw(r.x + r.width - 1, y, symbols::line::VERTICAL);
-            }
+            draw(r.x, y, symbol, style);
         }
     }
+
+    if r.height > 1 && border_styles.has_borders(B::RIGHT) {
+        let style = border_styles.style(B::RIGHT).patch(style);
+        let symbol = border_styles.symbols(B::RIGHT).vertical;
+        for y in r.y..(r.y + r.height) {
+            draw(r.x + r.width - 1, y, symbol, style);
+        }
+    }
+
+    // corners
     if r.width > 1 && r.height > 1 {
-        if borders.contains(Borders::LEFT | Borders::TOP) {
-            draw(r.x, r.y, symbols::line::ROUNDED_TOP_LEFT);
+        if border_styles.has_borders(B::LEFT | B::TOP) {
+            let style = border_styles.style(B::LEFT | B::TOP).patch(style);
+            let symbol = border_styles.symbols(B::LEFT | B::TOP).top_left;
+            draw(r.x, r.y, symbol, style);
         }
-        if borders.contains(Borders::LEFT | Borders::BOTTOM) {
-            draw(r.x, r.y + r.height - 1, symbols::line::ROUNDED_BOTTOM_LEFT);
+        if border_styles.has_borders(B::LEFT | B::BOTTOM) {
+            let style = border_styles.style(B::LEFT | B::BOTTOM).patch(style);
+            let symbol = border_styles.symbols(B::LEFT | B::BOTTOM).bottom_left;
+            draw(r.x, r.y + r.height - 1, symbol, style);
         }
-        if borders.contains(Borders::RIGHT | Borders::BOTTOM) {
-            draw(
-                r.x + r.width - 1,
-                r.y + r.height - 1,
-                symbols::line::ROUNDED_BOTTOM_RIGHT,
-            );
+        if border_styles.has_borders(B::RIGHT | B::BOTTOM) {
+            let style = border_styles.style(B::RIGHT | B::BOTTOM).patch(style);
+            let symbol = border_styles.symbols(B::RIGHT | B::BOTTOM).bottom_right;
+            draw(r.x + r.width - 1, r.y + r.height - 1, symbol, style);
         }
-        if borders.contains(Borders::RIGHT | Borders::TOP) {
-            draw(r.x + r.width - 1, r.y, symbols::line::ROUNDED_TOP_RIGHT);
+        if border_styles.has_borders(B::RIGHT | B::TOP) {
+            let style = border_styles.style(B::RIGHT | B::TOP).patch(style);
+            let symbol = border_styles.symbols(B::RIGHT | B::TOP).top_right;
+            draw(r.x + r.width - 1, r.y, symbol, style);
         }
     }
 }
@@ -73,27 +94,31 @@ fn fill_block(cx: &mut PaintCx, r: Rect, style: Style) {
 
 pub struct Block {
     pub(crate) content: Pod,
-    borders: Borders,
-    border_style: Style,
+    border_styles: BorderStyles,
+    style: Style,
     layout_style: taffy::style::Style,
     fill_with_bg: bool,
     inherit_style: bool,
 }
 
 impl Block {
-    pub fn new(
+    pub(crate) fn new(
         content: impl Widget + 'static,
-        borders: Borders,
-        border_style: Style,
+        border_styles: BorderStyles,
+        style: Style,
         inherit_style: bool,
     ) -> Self {
-        let pad =
-            |b| taffy::style::LengthPercentage::Length(if borders.contains(b) { 1.0 } else { 0.0 });
+        let pad = |b| {
+            taffy::style::LengthPercentage::Length(if border_styles.has_borders(b) {
+                1.0
+            } else {
+                0.0
+            })
+        };
         Block {
             content: Pod::new(content),
-            borders,
             fill_with_bg: true,
-            border_style,
+            style,
             inherit_style,
             layout_style: taffy::style::Style {
                 padding: taffy::prelude::Rect {
@@ -108,19 +133,21 @@ impl Block {
                 },
                 ..Default::default()
             },
+            border_styles,
         }
     }
 
-    pub fn set_borders(&mut self, borders: Borders) -> ChangeFlags {
-        if self.borders != borders {
-            self.borders = borders;
+    pub(crate) fn set_border_style(&mut self, border_style: &BorderStyles) -> ChangeFlags {
+        if &self.border_styles != border_style {
+            self.border_styles = border_style.clone();
+            // TODO more sophisticated check for needed ChangeFlags (specifically layout)
             ChangeFlags::LAYOUT | ChangeFlags::PAINT
         } else {
             ChangeFlags::empty()
         }
     }
 
-    pub fn set_inherit_style(&mut self, inherit: bool) -> ChangeFlags {
+    pub(crate) fn set_inherit_style(&mut self, inherit: bool) -> ChangeFlags {
         if self.inherit_style != inherit {
             self.inherit_style = inherit;
             ChangeFlags::PAINT
@@ -132,9 +159,9 @@ impl Block {
 
 impl StyleableWidget for Block {
     fn set_style(&mut self, style: Style) -> bool {
-        let changed = style != self.border_style;
+        let changed = style != self.style;
         if changed {
-            self.border_style = style;
+            self.style = style;
         }
         changed
     }
@@ -142,7 +169,7 @@ impl StyleableWidget for Block {
 
 impl Widget for Block {
     fn paint(&mut self, cx: &mut PaintCx) {
-        let style = self.border_style.patch(cx.override_style);
+        let style = self.style.patch(cx.override_style);
         cx.override_style = if self.inherit_style {
             style
         } else {
@@ -157,7 +184,7 @@ impl Widget for Block {
             fill_block(cx, cx.rect(), fill_style);
         }
 
-        render_border(cx, cx.rect(), self.borders, style);
+        render_border(cx, cx.rect(), &self.border_styles, style);
 
         self.content.paint(cx, cx.rect())
     }

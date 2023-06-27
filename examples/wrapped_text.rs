@@ -1,5 +1,5 @@
 use anyhow::Result;
-use ratatui::style::{Color, Style};
+use ratatui::style::Color;
 use trui::*;
 
 fn main() -> Result<()> {
