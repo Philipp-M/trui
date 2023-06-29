@@ -24,7 +24,7 @@ bitflags! {
         const ALL        = Self::TOP.bits() | Self::RIGHT.bits() | Self::BOTTOM.bits() | Self::LEFT.bits();
         /// Show top and bottom borders
         const HORIZONTAL = Self::BOTTOM.bits() | Self::TOP.bits();
-        /// Show top and bottom borders
+        /// Show left and right borders
         const VERTICAL   = Self::LEFT.bits() | Self::RIGHT.bits();
     }
 }
