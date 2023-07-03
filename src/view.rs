@@ -8,8 +8,8 @@ mod text;
 
 pub use xilem_core::{Id, IdPath, VecSplice};
 
-pub use self::core::{AnyView, BoxedView, Cx, View, ViewMarker, ViewSequence};
-pub use adapt::{Adapt, AdaptThunk};
+pub use self::core::*;
+pub use adapt::*;
 pub use block::*;
 pub use common::*;
 pub use events::*;

@@ -1,8 +1,8 @@
 use anyhow::Result;
 use ratatui::style::Color;
 use trui::{
-    block, v_stack, AnyView, App, BorderKind, Borders, BoxedView, Clickable, Hoverable, Styleable,
-    View, ViewMarker,
+    block, v_stack, AnyView, App, BorderKind, Borders, BoxedView, Clickable, Hoverable,
+    IntoBoxedView, Styleable, View, ViewMarker,
 };
 
 // TODO this basic logic (hover, styling etc.) should probably be its own widget (state)...
@@ -39,7 +39,7 @@ fn rainbow(normalized_value: f32) -> Color {
     Color::Rgb(red as u8, green as u8, blue as u8)
 }
 
-pub fn rainbow_blocks<T: 'static>(content: impl BoxedView<T>, count: usize) -> Box<dyn AnyView<T>> {
+pub fn rainbow_blocks<T: 'static>(content: impl IntoBoxedView<T>, count: usize) -> BoxedView<T> {
     let mut view = content.boxed();
     for i in 0..count {
         let color = rainbow((i as f32 / (count - 1) as f32 + 0.001).max(0.0).min(1.0));
@@ -71,7 +71,7 @@ fn main() -> Result<()> {
             current_button_color2: Color::Cyan,
         },
         |state| {
-            let v: Box<dyn AnyView<_, _>> = if state.count <= 10 {
+            let v: BoxedView<_> = if state.count <= 10 {
                 Box::new(format!(
                     "Nothing interesting here to see, count is low at {}",
                     state.count

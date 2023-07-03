@@ -8,12 +8,20 @@ use xilem_core::{Id, Message};
 
 #[derive(Debug, Clone)]
 pub enum Event {
+    /// Only sent once at the start of the application
+    Start,
+    Quit,
+    /// Sent e.g. when a future requests waking up the application
+    Wake,
+    FocusLost,
+    FocusGained,
+    Resize {
+        width: u16,
+        height: u16,
+    },
     // TODO create a custom type...
     Mouse(MouseEvent),
     Key(KeyEvent),
-    FocusLost,
-    FocusGained,
-    Resize { width: u16, height: u16 },
 }
 
 /// Static state that is shared between most contexts.

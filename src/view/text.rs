@@ -143,23 +143,24 @@ impl<T, A> View<T, A> for Text<T, A> {
     }
 }
 
+// TODO consider specialisation to avoid possibly unnecessary allocations (when e.g. using `Cow<str>` instead of `String`)
 impl<T, A, S: Into<String>> Styleable<T, A> for S {
     type Output = Text<T, A>;
 
     fn fg(self, color: Color) -> Self::Output {
-        <Text<T, A> as Styleable<T, A>>::fg(Text::from(self.into()), color)
+        Text::from(self.into()).fg(color)
     }
 
     fn bg(self, color: Color) -> Self::Output {
-        <Text<T, A> as Styleable<T, A>>::bg(Text::from(self.into()), color)
+        Text::from(self.into()).bg(color)
     }
 
     fn modifier(self, modifier: Modifier) -> Self::Output {
-        <Text<T, A> as Styleable<T, A>>::modifier(Text::from(self.into()), modifier)
+        Text::from(self.into()).modifier(modifier)
     }
 
     fn style(self, style: Style) -> Self::Output {
-        <Text<T, A> as Styleable<T, A>>::style(Text::from(self.into()), style)
+        Text::from(self.into()).style(style)
     }
 
     fn current_style(&self) -> Style {

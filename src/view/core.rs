@@ -1,16 +1,28 @@
+use std::{collections::HashSet, sync::mpsc::SyncSender};
+
 use crate::widget::{AnyWidget, ChangeFlags, Pod, Widget};
 use xilem_core::{Id, IdPath};
 
-xilem_core::generate_view_trait!(View, Widget, Cx, ChangeFlags;);
-xilem_core::generate_viewsequence_trait! {ViewSequence, View, ViewMarker, Widget, Cx, ChangeFlags, Pod;}
-xilem_core::generate_anyview_trait! {AnyView, View, ViewMarker, Cx, ChangeFlags, AnyWidget}
+xilem_core::generate_view_trait!(View, Widget, Cx, ChangeFlags; : Send);
+xilem_core::generate_viewsequence_trait! {ViewSequence, View, ViewMarker, Widget, Cx, ChangeFlags, Pod; : Send}
+xilem_core::generate_anyview_trait! {AnyView, View, ViewMarker, Cx, ChangeFlags, AnyWidget, BoxedView; + Send}
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Cx {
-    pub(crate) id_path: IdPath,
+    id_path: IdPath,
+    req_chan: SyncSender<IdPath>,
+    pub(crate) pending_async: HashSet<Id>,
 }
 
 impl Cx {
+    pub(crate) fn new(req_chan: &SyncSender<IdPath>) -> Self {
+        Cx {
+            id_path: Vec::new(),
+            req_chan: req_chan.clone(),
+            pending_async: HashSet::new(),
+        }
+    }
+
     pub fn push(&mut self, id: Id) {
         self.id_path.push(id);
     }
@@ -50,17 +62,17 @@ impl Cx {
 }
 
 // TODO put this into the "xilem_core::generate_anyview_trait!" macro?
-pub trait BoxedView<T, A = ()> {
-    fn boxed(self) -> Box<dyn AnyView<T, A>>;
+pub trait IntoBoxedView<T, A = ()>: Send {
+    fn boxed(self) -> BoxedView<T, A>;
 }
 
-impl<T, A, V> BoxedView<T, A> for V
+impl<T, A, V> IntoBoxedView<T, A> for V
 where
     V: View<T, A> + 'static,
     V::State: 'static,
     V::Element: 'static,
 {
-    fn boxed(self) -> Box<dyn AnyView<T, A>> {
+    fn boxed(self) -> BoxedView<T, A> {
         Box::from(self)
     }
 }
