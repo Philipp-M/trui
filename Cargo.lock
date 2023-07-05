@@ -768,4 +768,4 @@ checksum = "1a515f5799fe4961cb532f983ce2b23082366b898e52ffbce459c86f67c8378a"
 [[package]]
 name = "xilem_core"
 version = "0.1.0"
-source = "git+https://github.com/Philipp-M/xilem.git?branch=boxed-view#0ddf2cd9f903479d5181b5008f04b42302bd95de"
+source = "git+https://github.com/Philipp-M/xilem.git?branch=memoize-view#785a1e52a7699dbe9ae452c7f74367a33a0773de"

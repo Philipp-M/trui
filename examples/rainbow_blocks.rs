@@ -1,7 +1,7 @@
 use anyhow::Result;
 use ratatui::style::Color;
 use trui::{
-    block, v_stack, AnyView, App, BorderKind, Borders, BoxedView, Clickable, Hoverable,
+    block, memoize, v_stack, App, BorderKind, Borders, BoxedView, Clickable, Hoverable,
     IntoBoxedView, Styleable, View, ViewMarker,
 };
 
@@ -71,24 +71,6 @@ fn main() -> Result<()> {
             current_button_color2: Color::Cyan,
         },
         |state| {
-            let v: BoxedView<_> = if state.count <= 10 {
-                Box::new(format!(
-                    "Nothing interesting here to see, count is low at {}",
-                    state.count
-                ))
-            } else if state.count > 10 && state.count < 42 {
-                Box::new(format!("Count is bigger than 10 ({})", state.count).fg(Color::Gray))
-            } else if state.count == 42 {
-                Box::new(block("You have found the sense of life!".fg(Color::Green)).fg(Color::Red))
-            } else {
-                let color = Color::Rgb(
-                    255usize.saturating_sub(state.count * 2) as u8,
-                    255usize.saturating_sub(state.count * 2) as u8,
-                    255usize.saturating_sub(state.count * 2) as u8,
-                );
-                Box::new(block("Everything's downhill from here on...".fg(color)).fg(color))
-            };
-
             v_stack((
                 // for such simple things, I don't think it's more ergonomic to wrap these things into functions (with all the callbacks at least)...
                 button(
@@ -107,19 +89,48 @@ fn main() -> Result<()> {
                     },
                 ),
                 // this is (almost) the equivalent...
-                block(v)
-                    .with_borders(BorderKind::DoubleStraight)
-                    .fg(state.current_button_color2)
-                    .on_click(|state: &mut AppState| {
-                        state.current_button_color2 = Color::Red;
-                        state.count = state.count.saturating_sub(1);
-                    })
-                    .on_hover(|state: &mut AppState| {
-                        state.current_button_color2 = Color::Yellow;
-                    })
-                    .on_blur_hover(|state: &mut AppState| {
-                        state.current_button_color2 = Color::Gray;
-                    }),
+                memoize(
+                    (state.current_button_color2, state.count),
+                    |(button_color, count)| {
+                        tracing::debug!("This will be printed on every change of state.current_button_color2 or state.count");
+                        let count = *count;
+                        let v: BoxedView<_> = if count <= 10 {
+                            Box::new(format!(
+                                "Nothing interesting here to see, count is low at {}",
+                                count
+                            ))
+                        } else if count > 10 && count < 42 {
+                            Box::new(format!("Count is bigger than 10 ({})", count).fg(Color::Gray))
+                        } else if count == 42 {
+                            Box::new(
+                                block("You have found the sense of life!".fg(Color::Green))
+                                    .fg(Color::Red),
+                            )
+                        } else {
+                            let color = Color::Rgb(
+                                255usize.saturating_sub(count * 2) as u8,
+                                255usize.saturating_sub(count * 2) as u8,
+                                255usize.saturating_sub(count * 2) as u8,
+                            );
+                            Box::new(
+                                block("Everything's downhill from here on...".fg(color)).fg(color),
+                            )
+                        };
+                        block(v)
+                            .with_borders(BorderKind::DoubleStraight)
+                            .fg(*button_color)
+                            .on_click(|state: &mut AppState| {
+                                state.current_button_color2 = Color::Red;
+                                state.count = state.count.saturating_sub(1);
+                            })
+                            .on_hover(|state: &mut AppState| {
+                                state.current_button_color2 = Color::Yellow;
+                            })
+                            .on_blur_hover(|state: &mut AppState| {
+                                state.current_button_color2 = Color::Gray;
+                            })
+                    },
+                ),
                 rainbow_blocks("Rainbow blocks!", state.count),
             ))
         },

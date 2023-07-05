@@ -6,6 +6,7 @@ use xilem_core::{Id, IdPath};
 xilem_core::generate_view_trait!(View, Widget, Cx, ChangeFlags; : Send);
 xilem_core::generate_viewsequence_trait! {ViewSequence, View, ViewMarker, Widget, Cx, ChangeFlags, Pod; : Send}
 xilem_core::generate_anyview_trait! {AnyView, View, ViewMarker, Cx, ChangeFlags, AnyWidget, BoxedView; + Send}
+xilem_core::generate_memoize_view! {Memoize, MemoizeState, View, ViewMarker, Cx, ChangeFlags, s, memoize}
 
 #[derive(Clone)]
 pub struct Cx {
@@ -62,7 +63,7 @@ impl Cx {
 }
 
 // TODO put this into the "xilem_core::generate_anyview_trait!" macro?
-pub trait IntoBoxedView<T, A = ()>: Send {
+pub trait IntoBoxedView<T, A = ()> {
     fn boxed(self) -> BoxedView<T, A>;
 }
 
