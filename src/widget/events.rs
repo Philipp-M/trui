@@ -149,7 +149,7 @@ impl<E: Widget> Widget for OnHoverLost<E> {
 pub struct StyleOnHover<E> {
     pub element: E,
     is_hovering: bool,
-    style: Style,
+    pub(crate) style: Style,
 }
 
 impl<E> StyleOnHover<E> {
@@ -188,7 +188,7 @@ impl<E: Widget + StyleableWidget> Widget for StyleOnHover<E> {
 
 pub struct StyleOnPressed<E> {
     pub(crate) element: Pod,
-    style: Style,
+    pub(crate) style: Style,
     phantom: PhantomData<E>,
 }
 

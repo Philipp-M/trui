@@ -251,7 +251,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
                 .ok();
         }
 
-        if root_pod.state.flags.intersects(PodFlags::REQUEST_PAINT) {
+        if root_pod.state.flags.intersects(PodFlags::REQUEST_PAINT) || needs_layout_recomputation {
             let _paint_span = tracing::debug_span!("paint");
             let mut paint_cx = PaintCx {
                 widget_state: &mut self.root_state,

@@ -134,8 +134,15 @@ where
         state: &mut Self::State,
         element: &mut Self::Element,
     ) -> ChangeFlags {
-        self.view
-            .rebuild(cx, &prev.view, id, state, &mut element.element)
+        let mut changeflags = ChangeFlags::empty();
+        if element.style != self.style {
+            element.style = self.style;
+            changeflags |= ChangeFlags::PAINT;
+        }
+        changeflags |= self
+            .view
+            .rebuild(cx, &prev.view, id, state, &mut element.element);
+        changeflags
     }
 
     fn message(
@@ -179,7 +186,12 @@ where
         (state, child_id): &mut Self::State,
         element: &mut Self::Element,
     ) -> ChangeFlags {
-        cx.with_id(*id, |cx| {
+        let mut changeflags = ChangeFlags::empty();
+        if element.style != self.style {
+            element.style = self.style;
+            changeflags |= ChangeFlags::PAINT;
+        }
+        changeflags |= cx.with_id(*id, |cx| {
             self.view.rebuild(
                 cx,
                 &prev.view,
@@ -189,7 +201,8 @@ where
                     "The style on pressed content widget changed its type, this should never happen!",
                 ),
             )
-        })
+        });
+        changeflags
     }
 
     fn message(
