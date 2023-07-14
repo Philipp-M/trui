@@ -44,7 +44,6 @@ pub struct App<T, V: View<T>> {
     render_response_chan: tokio::sync::mpsc::Receiver<RenderResponse<V, V::State>>,
     return_chan: tokio::sync::mpsc::Sender<(V, V::State, HashSet<Id>)>,
     event_chan: tokio::sync::mpsc::Receiver<Event>,
-    pub(crate) rt: Runtime,
     terminal: Terminal<CrosstermBackend<Stdout>>,
     events: Vec<Message>,
     root_state: WidgetState,
@@ -167,8 +166,6 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             }
         });
 
-        let cx = Cx::new(&wake_tx);
-
         // Send this event here, so that the app renders directly when it is run.
         let _ = event_tx.blocking_send(Event::Start);
 
@@ -189,6 +186,8 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             app_task.run().await;
         });
 
+        let cx = Cx::new(&wake_tx, rt);
+
         App {
             req_chan: message_tx,
             render_response_chan: response_rx,
@@ -196,7 +195,6 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             event_chan: event_rx,
             terminal,
             root_pod: None,
-            rt,
             cx,
             id: None,
             root_state: WidgetState::new(),

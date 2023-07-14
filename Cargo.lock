@@ -131,6 +131,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "futures-task"
+version = "0.3.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76d3d132be6c0e6aa1534069c705a74a5997a356c0dc2f86a47765e5617c5b65"
+
+[[package]]
 name = "getrandom"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -636,6 +642,7 @@ dependencies = [
  "anyhow",
  "bitflags 2.3.3",
  "crossterm",
+ "futures-task",
  "rand",
  "ratatui",
  "taffy",
