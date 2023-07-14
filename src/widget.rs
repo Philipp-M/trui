@@ -5,7 +5,7 @@ mod linear_layout;
 mod text;
 
 pub use self::core::{
-    AnyWidget, ChangeFlags, CxState, Event, EventCx, LayoutCx, PaintCx, Pod, Point,
+    AnyWidget, ChangeFlags, CxState, Event, EventCx, LayoutCx, Message, PaintCx, Pod, Point,
     StyleableWidget, Widget,
 };
 pub(crate) use self::core::{PodFlags, WidgetState};

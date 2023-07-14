@@ -1,6 +1,6 @@
 use crate::{
     view::{Cx, View},
-    widget::{CxState, Event, EventCx, LayoutCx, PaintCx, Pod, PodFlags, WidgetState},
+    widget::{CxState, Event, EventCx, LayoutCx, Message, PaintCx, Pod, PodFlags, WidgetState},
 };
 use anyhow::Result;
 use crossterm::{
@@ -22,7 +22,7 @@ use std::{
 use taffy::{style::AvailableSpace, Taffy};
 use tokio::runtime::Runtime;
 use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
-use xilem_core::{AsyncWake, Id, IdPath, Message, MessageResult};
+use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
 
 // TODO less hardcoding and cross-platform support
 fn setup_logging(log_level: tracing::Level) -> Result<tracing_appender::non_blocking::WorkerGuard> {

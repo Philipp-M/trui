@@ -4,7 +4,9 @@ use crossterm::event::{KeyEvent, MouseEventKind};
 use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
 use std::{any::Any, io::Stdout, ops::DerefMut};
 use taffy::{tree::NodeId, Taffy};
-use xilem_core::{Id, Message};
+use xilem_core::{message, Id};
+
+message!(Send);
 
 #[derive(Debug, Clone)]
 pub enum Event {

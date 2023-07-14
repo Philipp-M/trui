@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # xilem_core = { path = "../xilem/crates/xilem_core" }
-xilem_core = { git = "https://github.com/Philipp-M/xilem.git", branch = "memoize-view" }
+xilem_core = { git = "https://github.com/linebender/xilem.git" }
 crossterm = "0.26.1"
 rand = "0.8.5"
 taffy = { git = "https://github.com/Philipp-M/taffy.git", branch = "null-node" }

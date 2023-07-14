@@ -3,11 +3,10 @@ use std::marker::PhantomData;
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::style::Style;
 use taffy::tree::NodeId;
-use xilem_core::Message;
 
 use super::{
     core::{IdPath, PaintCx, StyleableWidget},
-    Event, EventCx, LayoutCx, Pod, Widget,
+    Event, EventCx, LayoutCx, Message, Pod, Widget,
 };
 
 pub struct OnClick<E> {

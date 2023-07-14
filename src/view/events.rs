@@ -423,11 +423,16 @@ where
         element: &mut Self::Element,
     ) -> ChangeFlags {
         cx.with_id(*id, |cx| {
-            self.view
-            .rebuild(cx, &prev.view, child_id, state,                 element.element.downcast_mut().expect(
-                    "The style on pressed content widget changed its type, this should never happen!",
+            self.view.rebuild(
+                cx,
+                &prev.view,
+                child_id,
+                state,
+                element.element.downcast_mut().expect(
+                    "The style on pressed content widget changed its type,\
+                     this should never happen!",
                 ),
-)
+            )
         })
     }
 
