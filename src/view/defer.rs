@@ -8,17 +8,17 @@ use crate::widget::{AnyWidget, ChangeFlags};
 
 use super::{Cx, View, ViewMarker};
 
-pub struct PendingTask<V> {
+pub struct PendingTask<T> {
     waker: Waker,
-    task: Unconstrained<JoinHandle<V>>,
+    task: Unconstrained<JoinHandle<T>>,
 }
 
-impl<V> PendingTask<V> {
-    fn new(waker: Waker, task: Unconstrained<JoinHandle<V>>) -> Self {
+impl<T> PendingTask<T> {
+    fn new(waker: Waker, task: Unconstrained<JoinHandle<T>>) -> Self {
         PendingTask { waker, task }
     }
 
-    fn poll(&mut self) -> Option<V> {
+    fn poll(&mut self) -> Option<T> {
         let mut future_cx = Context::from_waker(&self.waker);
         match Pin::new(&mut self.task).poll(&mut future_cx) {
             Poll::Ready(Ok(v)) => Some(v),

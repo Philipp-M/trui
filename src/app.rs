@@ -213,8 +213,8 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     /// Run the app logic and update the widget tree.
     #[tracing::instrument(skip(self))]
     fn render(&mut self) -> Result<()> {
-        if self.render_element_tree(false) {
-            self.render_element_tree(true);
+        if self.build_widget_tree(false) {
+            self.build_widget_tree(true);
         }
         let root_pod = self.root_pod.as_mut().unwrap();
 
@@ -278,11 +278,11 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     /// Run one pass of app logic.
     ///
     /// Return value is whether there are any pending async futures.
-    fn render_element_tree(&mut self, delay: bool) -> bool {
+    fn build_widget_tree(&mut self, delay: bool) -> bool {
         self.cx.pending_async.clear();
         let _ = self.req_chan.blocking_send(AppMessage::Render(delay));
         if let Some(response) = self.render_response_chan.blocking_recv() {
-            let state = if let Some(element) = self.root_pod.as_mut() {
+            let state = if let Some(widget) = self.root_pod.as_mut() {
                 let mut state = response.state.unwrap();
                 let changes = response.view.rebuild(
                     &mut self.cx,
@@ -290,7 +290,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
                     self.id.as_mut().unwrap(),
                     &mut state,
                     //TODO: fail more gracefully but make it explicit that this is a bug
-                    element
+                    widget
                         .downcast_mut()
                         .expect("the root widget changed its type, this should never happen!"),
                 );
@@ -298,9 +298,9 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
                 assert!(self.cx.is_empty(), "id path imbalance on rebuild");
                 state
             } else {
-                let (id, state, element) = response.view.build(&mut self.cx);
+                let (id, state, widget) = response.view.build(&mut self.cx);
                 assert!(self.cx.is_empty(), "id path imbalance on build");
-                self.root_pod = Some(Pod::new(element));
+                self.root_pod = Some(Pod::new(widget));
                 self.id = Some(id);
                 state
             };
