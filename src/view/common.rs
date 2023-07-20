@@ -99,8 +99,8 @@ pub enum BorderKind {
     ThickStraight,
 }
 
-pub trait Styleable<T, A = ()> {
-    type Output: View<T, A>;
+pub trait Styleable<T, C, A = ()> {
+    type Output: View<T, C, A>;
     fn fg(self, color: Color) -> Self::Output;
     fn bg(self, color: Color) -> Self::Output;
     fn style(self, style: Style) -> Self::Output;

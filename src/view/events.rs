@@ -4,17 +4,17 @@ use ratatui::style::{Color, Style};
 use std::marker::PhantomData;
 use xilem_core::Id;
 
-pub trait Hoverable<T, A, V, C: Fn(&mut T) -> A + Send> {
-    fn on_hover(self, callback: C) -> OnHover<T, A, V, C>;
-    fn on_blur_hover(self, callback: C) -> OnHoverLost<T, A, V, C>;
+pub trait Hoverable<T, C, A, V, CB: Fn(&mut T) -> A + Send> {
+    fn on_hover(self, callback: CB) -> OnHover<T, C, A, V, CB>;
+    fn on_blur_hover(self, callback: CB) -> OnHoverLost<T, C, A, V, CB>;
 }
 
-impl<T, A, V, C> Hoverable<T, A, V, C> for V
+impl<T, C, A, V, CB> Hoverable<T, C, A, V, CB> for V
 where
-    V: View<T, A>,
-    C: Fn(&mut T) -> A + Send,
+    V: View<T, C, A>,
+    CB: Fn(&mut T) -> A + Send,
 {
-    fn on_hover(self, callback: C) -> OnHover<T, A, V, C> {
+    fn on_hover(self, callback: CB) -> OnHover<T, C, A, V, CB> {
         OnHover {
             view: self,
             callback,
@@ -22,7 +22,7 @@ where
         }
     }
 
-    fn on_blur_hover(self, callback: C) -> OnHoverLost<T, A, V, C> {
+    fn on_blur_hover(self, callback: CB) -> OnHoverLost<T, C, A, V, CB> {
         OnHoverLost {
             view: self,
             callback,
@@ -31,16 +31,16 @@ where
     }
 }
 
-pub trait Clickable<T, A, V, C: Fn(&mut T) -> A + Send> {
-    fn on_click(self, callback: C) -> OnClick<T, A, V, C>;
+pub trait Clickable<T, C, A, V, CB: Fn(&mut T) -> A + Send> {
+    fn on_click(self, callback: CB) -> OnClick<T, C, A, V, CB>;
 }
 
-impl<T, A, V, C> Clickable<T, A, V, C> for V
+impl<T, C, A, V, CB> Clickable<T, C, A, V, CB> for V
 where
-    V: View<T, A>,
-    C: Fn(&mut T) -> A + Send,
+    V: View<T, C, A>,
+    CB: Fn(&mut T) -> A + Send,
 {
-    fn on_click(self, callback: C) -> OnClick<T, A, V, C> {
+    fn on_click(self, callback: CB) -> OnClick<T, C, A, V, CB> {
         OnClick {
             view: self,
             callback,
@@ -52,21 +52,21 @@ where
 macro_rules! styled_event_views {
     ($($name:ident),*) => {
         $(
-        pub struct $name<T, A, V> {
+        pub struct $name<T, C, A, V> {
             view: V,
             style: Style,
-            phantom: PhantomData<fn() -> (T, A)>,
+            phantom: PhantomData<fn() -> (T, C, A)>,
         }
 
-        impl<T, A, V> ViewMarker for $name<T, A, V> {}
+        impl<T, C, A, V> ViewMarker for $name<T, C, A, V> {}
 
-        impl<T, A, V> Styleable<T, A> for $name<T, A, V>
+        impl<T, C, A, V> Styleable<T, C, A> for $name<T, C, A, V>
         where
-            V: View<T, A> + Styleable<T, A>,
-            V::Output: Styleable<T, A>,
-            <<V as Styleable<T, A>>::Output as View<T, A>>::Element: StyleableWidget + 'static,
+            V: View<T, C, A> + Styleable<T, C, A>,
+            V::Output: Styleable<T, C, A>,
+            <<V as Styleable<T, C, A>>::Output as View<T, C, A>>::Element: StyleableWidget + 'static,
         {
-            type Output = $name<T, A, <V as Styleable<T, A>>::Output>;
+            type Output = $name<T, C, A, <V as Styleable<T, C, A>>::Output>;
 
             fn fg(self, color: ratatui::style::Color) -> Self::Output {
                 $name {
@@ -110,17 +110,17 @@ macro_rules! styled_event_views {
 
 // TODO is "invisible" (i.e. without id) a good idea?
 // it never should receive events (or other things) directly and is just a trait on top of any *actual* view?
-impl<T, A, VS, V> View<T, A> for StyleOnHover<T, A, V>
+impl<T, A, C, VS, V> View<T, C, A> for StyleOnHover<T, C, A, V>
 where
-    VS: View<T, A>,
+    VS: View<T, C, A>,
     V::Element: StyleableWidget,
-    V: View<T, A> + Styleable<T, A, Output = VS>,
+    V: View<T, C, A> + Styleable<T, C, A, Output = VS>,
 {
     type State = V::State;
 
     type Element = widget::StyleOnHover<V::Element>;
 
-    fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
+    fn build(&self, cx: &mut Cx<C>) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, state, element) = self.view.build(cx);
 
         (id, state, widget::StyleOnHover::new(element, self.style))
@@ -128,7 +128,7 @@ where
 
     fn rebuild(
         &self,
-        cx: &mut Cx,
+        cx: &mut Cx<C>,
         prev: &Self,
         id: &mut xilem_core::Id,
         state: &mut Self::State,
@@ -156,17 +156,17 @@ where
     }
 }
 
-impl<T, A, VS, V> View<T, A> for StyleOnPressed<T, A, V>
+impl<T, A, C, VS, V> View<T, C, A> for StyleOnPressed<T, C, A, V>
 where
-    VS: View<T, A>,
+    VS: View<T, C, A>,
     V::Element: StyleableWidget + Widget + 'static,
-    V: View<T, A> + Styleable<T, A, Output = VS>,
+    V: View<T, C, A> + Styleable<T, C, A, Output = VS>,
 {
     type State = (V::State, Id);
 
     type Element = widget::StyleOnPressed<V::Element>;
 
-    fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
+    fn build(&self, cx: &mut Cx<C>) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, (state, element)) = cx.with_new_id(|cx| {
             let (child_id, state, element) = self.view.build(cx);
 
@@ -180,7 +180,7 @@ where
 
     fn rebuild(
         &self,
-        cx: &mut Cx,
+        cx: &mut Cx<C>,
         prev: &Self,
         id: &mut xilem_core::Id,
         (state, child_id): &mut Self::State,
@@ -223,17 +223,17 @@ where
 
 styled_event_views!(StyleOnHover, StyleOnPressed);
 
-pub trait HoverStyleable<T, A, V: View<T, A>> {
-    fn on_hover_style(self, style: Style) -> StyleOnHover<T, A, V>;
+pub trait HoverStyleable<T, C, A, V: View<T, C, A>> {
+    fn on_hover_style(self, style: Style) -> StyleOnHover<T, C, A, V>;
 
-    fn on_hover_fg(self, color: Color) -> StyleOnHover<T, A, V>
+    fn on_hover_fg(self, color: Color) -> StyleOnHover<T, C, A, V>
     where
         Self: Sized,
     {
         self.on_hover_style(Style::default().fg(color))
     }
 
-    fn on_hover_bg(self, color: Color) -> StyleOnHover<T, A, V>
+    fn on_hover_bg(self, color: Color) -> StyleOnHover<T, C, A, V>
     where
         Self: Sized,
     {
@@ -241,12 +241,12 @@ pub trait HoverStyleable<T, A, V: View<T, A>> {
     }
 }
 
-impl<T, A, VS, V> HoverStyleable<T, A, V> for V
+impl<T, C, A, VS, V> HoverStyleable<T, C, A, V> for V
 where
-    VS: View<T, A>,
-    V: View<T, A> + Styleable<T, A, Output = VS>,
+    VS: View<T, C, A>,
+    V: View<T, C, A> + Styleable<T, C, A, Output = VS>,
 {
-    fn on_hover_style(self, style: Style) -> StyleOnHover<T, A, V> {
+    fn on_hover_style(self, style: Style) -> StyleOnHover<T, C, A, V> {
         StyleOnHover {
             view: self,
             style,
@@ -255,17 +255,17 @@ where
     }
 }
 
-pub trait PressedStyleable<T, A, V: View<T, A>> {
-    fn on_pressed_style(self, style: Style) -> StyleOnPressed<T, A, V>;
+pub trait PressedStyleable<T, C, A, V: View<T, C, A>> {
+    fn on_pressed_style(self, style: Style) -> StyleOnPressed<T, C, A, V>;
 
-    fn on_pressed_fg(self, color: Color) -> StyleOnPressed<T, A, V>
+    fn on_pressed_fg(self, color: Color) -> StyleOnPressed<T, C, A, V>
     where
         Self: Sized,
     {
         self.on_pressed_style(Style::default().fg(color))
     }
 
-    fn on_pressed_bg(self, color: Color) -> StyleOnPressed<T, A, V>
+    fn on_pressed_bg(self, color: Color) -> StyleOnPressed<T, C, A, V>
     where
         Self: Sized,
     {
@@ -273,12 +273,12 @@ pub trait PressedStyleable<T, A, V: View<T, A>> {
     }
 }
 
-impl<T, A, VS, V> PressedStyleable<T, A, V> for V
+impl<T, C, A, VS, V> PressedStyleable<T, C, A, V> for V
 where
-    VS: View<T, A>,
-    V: View<T, A> + Styleable<T, A, Output = VS>,
+    VS: View<T, C, A>,
+    V: View<T, C, A> + Styleable<T, C, A, Output = VS>,
 {
-    fn on_pressed_style(self, style: Style) -> StyleOnPressed<T, A, V> {
+    fn on_pressed_style(self, style: Style) -> StyleOnPressed<T, C, A, V> {
         StyleOnPressed {
             view: self,
             style,
@@ -291,24 +291,24 @@ where
 macro_rules! event_views {
     ($($name:ident),*) => {
         $(
-        pub struct $name<T, A, V, C> {
+        pub struct $name<T, C, A, V, CB> {
             view: V,
-            callback: C,
-            phantom: PhantomData<fn() -> (T, A)>,
+            callback: CB,
+            phantom: PhantomData<fn() -> (T, C, A)>,
         }
 
-        impl<T, A, V, C> ViewMarker for $name<T, A, V, C> {}
+        impl<T, C, A, V, CB> ViewMarker for $name<T, C, A, V, CB> {}
 
-        impl<T, A, V, C> View<T, A> for $name<T, A, V, C>
+        impl<T, C, A, V, CB> View<T, C, A> for $name<T, C, A, V, CB>
         where
-            V: View<T, A>,
-            C: Fn(&mut T) -> A + Send,
+            V: View<T, C, A>,
+            CB: Fn(&mut T) -> A + Send,
         {
             type State = (V::State, Id);
 
             type Element = widget::$name<V::Element>;
 
-            fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
+            fn build(&self, cx: &mut Cx<C>) -> (xilem_core::Id, Self::State, Self::Element) {
                 let (id, (state, element)) = cx.with_new_id(|cx| {
                     let (child_id, state, element) = self.view.build(cx);
 
@@ -319,7 +319,7 @@ macro_rules! event_views {
 
             fn rebuild(
                 &self,
-                cx: &mut Cx,
+                cx: &mut Cx<C>,
                 prev: &Self,
                 id: &mut xilem_core::Id,
                 (state, child_id): &mut Self::State,
@@ -348,12 +348,12 @@ macro_rules! event_views {
             }
         }
 
-        impl<T, A, V, C> Styleable<T, A> for $name<T, A, V, C>
+        impl<T, C, A, V, CB> Styleable<T, C, A> for $name<T, C, A, V, CB>
         where
-            V: View<T, A> + Styleable<T, A>,
-            C: Fn(&mut T) -> A + Send,
+            V: View<T, C, A> + Styleable<T, C, A>,
+            CB: Fn(&mut T) -> A + Send,
         {
-            type Output = $name<T, A, <V as Styleable<T, A>>::Output, C>;
+            type Output = $name<T, C, A, <V as Styleable<T, C, A>>::Output, CB>;
 
             fn fg(self, color: ratatui::style::Color) -> Self::Output {
                 $name {
@@ -397,25 +397,25 @@ macro_rules! event_views {
 
 event_views!(OnHover, OnHoverLost);
 
-pub struct OnClick<T, A, V, C> {
+pub struct OnClick<T, C, A, V, CB> {
     view: V,
-    callback: C,
-    phantom: PhantomData<fn() -> (T, A)>,
+    callback: CB,
+    phantom: PhantomData<fn() -> (T, C, A)>,
 }
 
-impl<T, A, V, C> ViewMarker for OnClick<T, A, V, C> {}
+impl<T, C, A, V, CB> ViewMarker for OnClick<T, C, A, V, CB> {}
 
-impl<T, A, V, C> View<T, A> for OnClick<T, A, V, C>
+impl<T, C, A, V, CB> View<T, C, A> for OnClick<T, C, A, V, CB>
 where
-    V: View<T, A>,
-    <V as View<T, A>>::Element: 'static,
-    C: Fn(&mut T) -> A + Send,
+    V: View<T, C, A>,
+    <V as View<T, C, A>>::Element: 'static,
+    CB: Fn(&mut T) -> A + Send,
 {
     type State = (V::State, Id);
 
     type Element = widget::OnClick<V::Element>;
 
-    fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
+    fn build(&self, cx: &mut Cx<C>) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, (state, element)) = cx.with_new_id(|cx| {
             let (child_id, state, element) = self.view.build(cx);
 
@@ -429,7 +429,7 @@ where
 
     fn rebuild(
         &self,
-        cx: &mut Cx,
+        cx: &mut Cx<C>,
         prev: &Self,
         id: &mut xilem_core::Id,
         (state, child_id): &mut Self::State,
@@ -466,14 +466,14 @@ where
     }
 }
 
-impl<T, A, V, C> Styleable<T, A> for OnClick<T, A, V, C>
+impl<T, C, A, V, CB> Styleable<T, C, A> for OnClick<T, C, A, V, CB>
 where
-    V: View<T, A> + Styleable<T, A>,
+    V: View<T, C, A> + Styleable<T, C, A>,
     // <V as Styleable<T, A>>::Output: 'static,
-    <<V as Styleable<T, A>>::Output as View<T, A>>::Element: 'static,
-    C: Fn(&mut T) -> A + Send,
+    <<V as Styleable<T, C, A>>::Output as View<T, C, A>>::Element: 'static,
+    CB: Fn(&mut T) -> A + Send,
 {
-    type Output = OnClick<T, A, <V as Styleable<T, A>>::Output, C>;
+    type Output = OnClick<T, C, A, <V as Styleable<T, C, A>>::Output, CB>;
 
     fn fg(self, color: ratatui::style::Color) -> Self::Output {
         OnClick {

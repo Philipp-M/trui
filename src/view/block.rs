@@ -6,27 +6,27 @@ use super::{BorderKind, BorderStyle, BorderStyles, Borders, Cx, Styleable, View,
 use ratatui::style::{Color, Style};
 use xilem_core::MessageResult;
 
-pub struct Block<T, A, V> {
+pub struct Block<T, C, A, V> {
     content: V,
-    phantom: PhantomData<fn() -> (T, A)>,
+    phantom: PhantomData<fn() -> (T, C, A)>,
     border_styles: BorderStyles,
     style: Style, // base style, merged on top of border style currently (overrides attributes if they are defined in border_style)
     fill_with_bg: bool,
     inherit_style: bool,
 }
 
-impl<T, A, V> ViewMarker for Block<T, A, V> {}
+impl<T, C, A, V> ViewMarker for Block<T, C, A, V> {}
 
-impl<T, A, V> View<T, A> for Block<T, A, V>
+impl<T, A, C, V> View<T, C, A> for Block<T, C, A, V>
 where
-    V: View<T, A>,
+    V: View<T, C, A>,
     V::Element: 'static,
 {
     type State = (V::State, xilem_core::Id);
 
     type Element = widget::Block;
 
-    fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
+    fn build(&self, cx: &mut Cx<C>) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, (state, element)) = cx.with_new_id(|cx| {
             let (child_id, state, element) = self.content.build(cx);
             (
@@ -45,7 +45,7 @@ where
 
     fn rebuild(
         &self,
-        cx: &mut Cx,
+        cx: &mut Cx<C>,
         prev: &Self,
         id: &mut xilem_core::Id,
         (state, child_id): &mut Self::State,
@@ -90,9 +90,9 @@ where
     }
 }
 
-impl<T, A, V> Styleable<T, A> for Block<T, A, V>
+impl<T, C, A, V> Styleable<T, C, A> for Block<T, C, A, V>
 where
-    V: View<T, A>,
+    V: View<T, C, A>,
     V::Element: 'static,
 {
     type Output = Self;
@@ -122,7 +122,7 @@ where
     }
 }
 
-impl<T, A, V> Block<T, A, V> {
+impl<T, C, A, V> Block<T, C, A, V> {
     pub fn inherit_style(mut self, inherit: bool) -> Self {
         self.inherit_style = inherit;
         self
@@ -150,7 +150,7 @@ impl<T, A, V> Block<T, A, V> {
     }
 }
 
-pub fn block<T, A, V>(content: V) -> Block<T, A, V> {
+pub fn block<T, C, A, V>(content: V) -> Block<T, C, A, V> {
     Block {
         content,
         phantom: PhantomData,
@@ -161,7 +161,7 @@ pub fn block<T, A, V>(content: V) -> Block<T, A, V> {
     }
 }
 
-pub fn bordered_block<T, A, V>(content: V) -> Block<T, A, V> {
+pub fn bordered_block<T, C, A, V>(content: V) -> Block<T, C, A, V> {
     block(content).with_borders(Borders::ALL)
 }
 

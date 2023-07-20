@@ -6,12 +6,12 @@ use unicode_segmentation::UnicodeSegmentation;
 
 impl ViewMarker for &str {}
 
-impl<T, A> View<T, A> for &str {
+impl<T, C, A> View<T, C, A> for &str {
     type State = ();
 
     type Element = widget::Text;
 
-    fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
+    fn build(&self, cx: &mut Cx<C>) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, element) = cx.with_new_id(|_| widget::Text {
             text: String::from(*self),
             style: Style::default(),
@@ -21,7 +21,7 @@ impl<T, A> View<T, A> for &str {
 
     fn rebuild(
         &self,
-        _cx: &mut Cx,
+        _cx: &mut Cx<C>,
         _prev: &Self,
         _id: &mut xilem_core::Id,
         _state: &mut Self::State,
@@ -43,24 +43,24 @@ impl<T, A> View<T, A> for &str {
 
 impl ViewMarker for String {}
 
-impl<T, A> View<T, A> for String {
+impl<T, C, A> View<T, C, A> for String {
     type State = ();
 
     type Element = widget::Text;
 
-    fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
-        <&str as View<T>>::build(&self.as_str(), cx)
+    fn build(&self, cx: &mut Cx<C>) -> (xilem_core::Id, Self::State, Self::Element) {
+        <&str as View<T, C, A>>::build(&self.as_str(), cx)
     }
 
     fn rebuild(
         &self,
-        cx: &mut Cx,
+        cx: &mut Cx<C>,
         prev: &Self,
         id: &mut xilem_core::Id,
         state: &mut Self::State,
         element: &mut Self::Element,
     ) -> ChangeFlags {
-        <&str as View<T>>::rebuild(&self.as_str(), cx, &prev.as_str(), id, state, element)
+        <&str as View<T, C, A>>::rebuild(&self.as_str(), cx, &prev.as_str(), id, state, element)
     }
 
     fn message(
@@ -70,11 +70,11 @@ impl<T, A> View<T, A> for String {
         message: Box<dyn std::any::Any>,
         app_state: &mut T,
     ) -> xilem_core::MessageResult<A> {
-        <&str as View<T, A>>::message(&self.as_str(), id_path, state, message, app_state)
+        <&str as View<T, C, A>>::message(&self.as_str(), id_path, state, message, app_state)
     }
 }
 
-impl<T, A> From<&str> for Text<T, A> {
+impl<T, C, A> From<&str> for Text<T, C, A> {
     fn from(text: &str) -> Self {
         Text {
             text: text.into(),
@@ -84,7 +84,7 @@ impl<T, A> From<&str> for Text<T, A> {
     }
 }
 
-impl<T, A> From<String> for Text<T, A> {
+impl<T, C, A> From<String> for Text<T, C, A> {
     fn from(text: String) -> Self {
         Text {
             text,
@@ -95,21 +95,21 @@ impl<T, A> From<String> for Text<T, A> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Text<T = (), A = ()> {
+pub struct Text<T, C, A = ()> {
     text: String,
     style: Style,
     // necessary for inference...
-    phantom: PhantomData<fn() -> (T, A)>,
+    phantom: PhantomData<fn() -> (T, C, A)>,
 }
 
-impl<T, A> ViewMarker for Text<T, A> {}
+impl<T, C, A> ViewMarker for Text<T, C, A> {}
 
-impl<T, A> View<T, A> for Text<T, A> {
+impl<T, C, A> View<T, C, A> for Text<T, C, A> {
     type State = ();
 
     type Element = widget::Text;
 
-    fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
+    fn build(&self, cx: &mut Cx<C>) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, element) = cx.with_new_id(|_| widget::Text {
             text: self.text.clone(),
             style: self.style,
@@ -119,7 +119,7 @@ impl<T, A> View<T, A> for Text<T, A> {
 
     fn rebuild(
         &self,
-        _cx: &mut Cx,
+        _cx: &mut Cx<C>,
         _prev: &Self,
         _id: &mut xilem_core::Id,
         _state: &mut Self::State,
@@ -144,8 +144,8 @@ impl<T, A> View<T, A> for Text<T, A> {
 }
 
 // TODO consider specialisation to avoid possibly unnecessary allocations (when e.g. using `Cow<str>` instead of `String`)
-impl<T, A, S: Into<String>> Styleable<T, A> for S {
-    type Output = Text<T, A>;
+impl<T, C, A, S: Into<String>> Styleable<T, C, A> for S {
+    type Output = Text<T, C, A>;
 
     fn fg(self, color: Color) -> Self::Output {
         Text::from(self.into()).fg(color)
@@ -168,7 +168,7 @@ impl<T, A, S: Into<String>> Styleable<T, A> for S {
     }
 }
 
-impl<T, A> Styleable<T, A> for Text<T, A> {
+impl<T, C, A> Styleable<T, C, A> for Text<T, C, A> {
     type Output = Self;
 
     fn fg(mut self, color: Color) -> Self::Output {
@@ -196,17 +196,17 @@ impl<T, A> Styleable<T, A> for Text<T, A> {
     }
 }
 
-pub struct WrappedText<T, A> {
+pub struct WrappedText<T, C, A> {
     words: Vec<(String, Style)>,
-    phantom: PhantomData<fn() -> (T, A)>,
+    phantom: PhantomData<fn() -> (T, C, A)>,
 }
 
-pub trait ToWrappedText<T, A> {
-    fn wrapped(self) -> WrappedText<T, A>;
+pub trait ToWrappedText<T, C, A> {
+    fn wrapped(self) -> WrappedText<T, C, A>;
 }
 
-impl<S, A, T: Into<Text<S, A>>> ToWrappedText<S, A> for T {
-    fn wrapped(self) -> WrappedText<S, A> {
+impl<S, C, A, T: Into<Text<S, C, A>>> ToWrappedText<S, C, A> for T {
+    fn wrapped(self) -> WrappedText<S, C, A> {
         let text = self.into();
         WrappedText {
             words: text
@@ -221,8 +221,10 @@ impl<S, A, T: Into<Text<S, A>>> ToWrappedText<S, A> for T {
 }
 
 // TODO maybe extend this for bigger tuples as well with a macro...
-impl<S, A, T1: Into<Text<S, A>>, T2: Into<Text<S, A>>> ToWrappedText<S, A> for (T1, T2) {
-    fn wrapped(self) -> WrappedText<S, A> {
+impl<S, C, A, T1: Into<Text<S, C, A>>, T2: Into<Text<S, C, A>>> ToWrappedText<S, C, A>
+    for (T1, T2)
+{
+    fn wrapped(self) -> WrappedText<S, C, A> {
         let mut words = Vec::new();
         let text = self.0.into();
         for w in text
@@ -247,21 +249,21 @@ impl<S, A, T1: Into<Text<S, A>>, T2: Into<Text<S, A>>> ToWrappedText<S, A> for (
     }
 }
 
-impl<T, A> ViewMarker for WrappedText<T, A> {}
+impl<T, C, A> ViewMarker for WrappedText<T, C, A> {}
 
-impl<T, A> View<T, A> for WrappedText<T, A> {
+impl<T, C, A> View<T, C, A> for WrappedText<T, C, A> {
     type State = ();
 
     type Element = widget::WrappedText;
 
-    fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
+    fn build(&self, cx: &mut Cx<C>) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, element) = cx.with_new_id(|_| widget::WrappedText::new(self.words.clone()));
         (id, (), element)
     }
 
     fn rebuild(
         &self,
-        _cx: &mut Cx,
+        _cx: &mut Cx<C>,
         _prev: &Self,
         _id: &mut xilem_core::Id,
         _state: &mut Self::State,

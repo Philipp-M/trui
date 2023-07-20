@@ -3,7 +3,7 @@ use ratatui::style::Color;
 use trui::*;
 
 fn main() -> Result<()> {
-    App::new((), |()| {
+    App::new(|_| (), |(), _| {
         h_stack((
             block(("Different ".fg(Color::Red), "Colors that are wrapped: Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua.".fg(Color::Blue)).wrapped()),
             // TODO proper wrapping with new lines etc.

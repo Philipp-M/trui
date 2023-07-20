@@ -6,13 +6,13 @@ use trui::{
 };
 
 // TODO this basic logic (hover, styling etc.) should probably be its own widget (state)...
-pub fn button<T>(
+pub fn button<T, C>(
     label: impl Into<String>,
     block_color: Color,
     click_cb: impl Fn(&mut T) + Send,
     hover_cb: impl Fn(&mut T) + Send,
     hover_lost_cb: impl Fn(&mut T) + Send,
-) -> impl View<T> + ViewMarker + Styleable<T> {
+) -> impl View<T, C> + ViewMarker + Styleable<T, C> {
     block(label.into())
         .with_borders(Borders::ALL)
         .fg(block_color)
@@ -39,7 +39,10 @@ fn rainbow(normalized_value: f32) -> Color {
     Color::Rgb(red as u8, green as u8, blue as u8)
 }
 
-pub fn rainbow_blocks<T: 'static>(content: impl IntoBoxedView<T>, count: usize) -> BoxedView<T> {
+pub fn rainbow_blocks<T: 'static, C: 'static>(
+    content: impl IntoBoxedView<T, C>,
+    count: usize,
+) -> BoxedView<T, C> {
     let mut view = content.boxed();
     for i in 0..count {
         let color = rainbow((i as f32 / (count - 1) as f32 + 0.001).max(0.0).min(1.0));
@@ -65,12 +68,12 @@ impl AppState {
 
 fn main() -> Result<()> {
     App::new(
-        AppState {
+        |_| AppState {
             count: 10,
             current_button_color: Color::Gray,
             current_button_color2: Color::Cyan,
         },
-        |state| {
+        |state, _| {
             v_stack((
                 // for such simple things, I don't think it's more ergonomic to wrap these things into functions (with all the callbacks at least)...
                 button(
@@ -94,7 +97,7 @@ fn main() -> Result<()> {
                     |(button_color, count)| {
                         tracing::debug!("This will be printed on every change of state.current_button_color2 or state.count");
                         let count = *count;
-                        let v: BoxedView<_> = if count <= 10 {
+                        let v: BoxedView<_, _> = if count <= 10 {
                             Box::new(format!(
                                 "Nothing interesting here to see, count is low at {}",
                                 count

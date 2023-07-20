@@ -2,10 +2,10 @@ use anyhow::Result;
 use ratatui::style::{Color, Style};
 use trui::*;
 
-pub fn button<T: 'static>(
-    content: impl IntoBoxedView<T>,
+pub fn button<T: 'static, C>(
+    content: impl IntoBoxedView<T, C>,
     click_cb: impl Fn(&mut T) + Send + 'static,
-) -> impl View<T> + ViewMarker {
+) -> impl View<T, C> + ViewMarker {
     block(content.boxed())
         .with_borders(BorderKind::ThickStraight)
         .on_hover_style(Style::default().fg(Color::Green).bg(Color::LightYellow))
@@ -14,14 +14,17 @@ pub fn button<T: 'static>(
 }
 
 fn main() -> Result<()> {
-    App::new(0, |count| {
-        v_stack((
-            button(
-                format!("Click me to increment the count: {count}").fg(Color::Green),
-                |count| *count += 1,
-            ),
-            button("Click me to decrement".fg(Color::Red), |count| *count -= 1),
-        ))
-    })
+    App::new(
+        |_| 0,
+        |count, _| {
+            v_stack((
+                button(
+                    format!("Click me to increment the count: {count}").fg(Color::Green),
+                    |count| *count += 1,
+                ),
+                button("Click me to decrement".fg(Color::Red), |count| *count -= 1),
+            ))
+        },
+    )
     .run()
 }

@@ -17,6 +17,7 @@ use std::{
     collections::HashSet,
     io::{stdout, Stdout, Write},
     path::PathBuf,
+    sync::{mpsc::SyncSender, Arc},
     time::Duration,
 };
 use taffy::{style::AvailableSpace, Taffy};
@@ -39,8 +40,8 @@ fn setup_logging(log_level: tracing::Level) -> Result<tracing_appender::non_bloc
     Ok(guard)
 }
 
-pub struct App<T, V: View<T>> {
-    req_chan: tokio::sync::mpsc::Sender<AppMessage>,
+pub struct App<T, V: View<T, Arc<AppCx<M>>>, M = ()> {
+    req_chan: tokio::sync::mpsc::Sender<AppMessage<M>>,
     render_response_chan: tokio::sync::mpsc::Receiver<RenderResponse<V, V::State>>,
     return_chan: tokio::sync::mpsc::Sender<(V, V::State, HashSet<Id>)>,
     event_chan: tokio::sync::mpsc::Receiver<Event>,
@@ -49,7 +50,7 @@ pub struct App<T, V: View<T>> {
     root_state: WidgetState,
     root_pod: Option<Pod>,
     taffy: Taffy,
-    cx: Cx,
+    cx: Cx<Arc<AppCx<M>>>,
     id: Option<Id>,
 }
 
@@ -61,11 +62,12 @@ const RENDER_DELAY: Duration = Duration::from_millis(5);
 /// It contains no information about how to interact with the User (browser, native, terminal).
 /// It is created by [`App`] and kept in a separate task for updating the apps contents.
 /// The App can send [AppMessage] to inform the the AppTask about an user interaction.
-struct AppTask<T, V: View<T>, F: FnMut(&mut T) -> V> {
-    req_chan: tokio::sync::mpsc::Receiver<AppMessage>,
+struct AppTask<T, M, V: View<T, Arc<AppCx<M>>>, F: FnMut(&mut T, Arc<AppCx<M>>) -> V> {
+    req_chan: tokio::sync::mpsc::Receiver<AppMessage<M>>,
     response_chan: tokio::sync::mpsc::Sender<RenderResponse<V, V::State>>,
     return_chan: tokio::sync::mpsc::Receiver<(V, V::State, HashSet<Id>)>,
     event_chan: tokio::sync::mpsc::Sender<Event>,
+    app_context: Arc<AppCx<M>>,
 
     data: T,
     app_logic: F,
@@ -77,9 +79,10 @@ struct AppTask<T, V: View<T>, F: FnMut(&mut T) -> V> {
 
 // TODO maybe rename this, so that it is clear that these events are sent to the AppTask (AppTask name is also for debate IMO)
 /// A message sent from the main UI thread ([`App`]) to the [`AppTask`].
-pub(crate) enum AppMessage {
+pub(crate) enum AppMessage<M> {
     Events(Vec<Message>),
     Wake(IdPath),
+    StateUpdate(M),
     // Parameter indicates whether it should be delayed for async
     Render(bool),
 }
@@ -89,6 +92,16 @@ struct RenderResponse<V, S> {
     prev: Option<V>,
     view: V,
     state: Option<S>,
+}
+
+pub trait StateUpdater<A, M> {
+    fn update(&mut self, message: M) -> MessageResult<A>;
+}
+
+impl<T, A> StateUpdater<A, ()> for T {
+    fn update(&mut self, _message: ()) -> MessageResult<A> {
+        MessageResult::Nop
+    }
 }
 
 /// The state of the  [`AppTask`].
@@ -106,8 +119,28 @@ enum UiState {
     WokeUI,
 }
 
-impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
-    pub fn new(data: T, app_logic: impl FnMut(&mut T) -> V + Send + 'static) -> Self {
+pub struct AppCx<M> {
+    pub update_state_sender: SyncSender<M>,
+    pub runtime: Runtime,
+}
+
+impl<M> AppCx<M> {
+    pub fn update_state(&self, message: M) {
+        let _ = self.update_state_sender.send(message);
+    }
+}
+
+impl<
+        T: Send + 'static + StateUpdater<(), M>,
+        M: Send + 'static,
+        V: View<T, Arc<AppCx<M>>> + 'static,
+    > App<T, V, M>
+{
+    // TODO data fn with mut context?
+    pub fn new(
+        data: impl FnOnce(Arc<AppCx<M>>) -> T,
+        app_logic: impl FnMut(&mut T, Arc<AppCx<M>>) -> V + Send + 'static,
+    ) -> Self {
         let backend = CrosstermBackend::new(stdout());
         let terminal = Terminal::new(backend).unwrap(); // TODO handle errors...
 
@@ -133,6 +166,16 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         std::thread::spawn(move || {
             while let Ok(id_path) = wake_rx.recv() {
                 let _ = message_tx_clone.blocking_send(AppMessage::Wake(id_path));
+            }
+        });
+
+        let (state_message_tx, state_message_rx) = std::sync::mpsc::sync_channel(10);
+
+        let message_tx_clone = message_tx.clone();
+
+        std::thread::spawn(move || {
+            while let Ok(message) = state_message_rx.recv() {
+                let _ = message_tx_clone.blocking_send(AppMessage::StateUpdate(message));
             }
         });
 
@@ -166,16 +209,26 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             }
         });
 
+        let app_context = Arc::new(AppCx {
+            update_state_sender: state_message_tx.clone(),
+            runtime: rt,
+        });
+
+        let data = data(app_context.clone());
+
         // Send this event here, so that the app renders directly when it is run.
         let _ = event_tx.blocking_send(Event::Start);
 
+        let app_context_clone = app_context.clone();
         // spawn app task
-        rt.spawn(async move {
+        app_context.runtime.spawn(async move {
             let mut app_task = AppTask {
                 req_chan: message_rx,
                 response_chan: response_tx,
                 return_chan: return_rx,
                 event_chan: event_tx,
+                app_context: app_context_clone,
+                // state_message_chan: state_message_tx,
                 data,
                 app_logic,
                 view: None,
@@ -186,7 +239,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             app_task.run().await;
         });
 
-        let cx = Cx::new(&wake_tx, rt);
+        let cx = Cx::new(&wake_tx, app_context);
 
         App {
             req_chan: message_tx,
@@ -251,6 +304,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
 
         if root_pod.state.flags.intersects(PodFlags::REQUEST_PAINT) || needs_layout_recomputation {
             let _paint_span = tracing::debug_span!("paint");
+            tracing::debug!("Repaint: {:?}", root_pod.state.flags);
             let mut paint_cx = PaintCx {
                 widget_state: &mut self.root_state,
                 cx_state,
@@ -330,6 +384,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         self.terminal.clear()?;
 
         let main_loop_tracing_span = tracing::debug_span!("main loop");
+        // TODO batch/debounce events before render
         while let Some(event) = self.event_chan.blocking_recv() {
             let quit = matches!(event, Event::Quit);
 
@@ -367,7 +422,13 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     }
 }
 
-impl<T, V: View<T>, F: FnMut(&mut T) -> V> AppTask<T, V, F> {
+impl<
+        T: StateUpdater<(), M>,
+        M,
+        V: View<T, Arc<AppCx<M>>>,
+        F: FnMut(&mut T, Arc<AppCx<M>>) -> V,
+    > AppTask<T, M, V, F>
+{
     async fn run(&mut self) {
         let mut deadline = None;
         loop {
@@ -390,8 +451,10 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> AppTask<T, V, F> {
                         }
                     }
                     AppMessage::Wake(id_path) => {
-                        let needs_rebuild;
-                        {
+                        // an empty path signals the app, that it generally needs a rebuild
+                        let mut needs_rebuild = id_path.is_empty();
+
+                        if !needs_rebuild {
                             let result = self.view.as_ref().unwrap().message(
                                 &id_path[1..],
                                 self.state.as_mut().unwrap(),
@@ -409,8 +472,9 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> AppTask<T, V, F> {
                                     break;
                                 }
                             }
-                            let id = id_path.last().unwrap();
-                            self.pending_async.remove(id);
+                            if let Some(id) = id_path.last() {
+                                self.pending_async.remove(id);
+                            }
                             if self.pending_async.is_empty() && self.ui_state == UiState::Delayed {
                                 self.render().await;
                                 deadline = None;
@@ -426,6 +490,16 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> AppTask<T, V, F> {
                             self.ui_state = UiState::Delayed;
                         }
                     }
+                    AppMessage::StateUpdate(message) => {
+                        if matches!(self.data.update(message), MessageResult::RequestRebuild)
+                            && self.ui_state == UiState::Start
+                        {
+                            self.ui_state = UiState::WokeUI;
+                            if self.event_chan.send(Event::Wake).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
                 },
                 Ok(None) => break,
                 Err(_) => {
@@ -437,7 +511,7 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> AppTask<T, V, F> {
     }
 
     async fn render(&mut self) {
-        let view = (self.app_logic)(&mut self.data);
+        let view = (self.app_logic)(&mut self.data, self.app_context.clone());
         let response = RenderResponse {
             prev: self.view.take(),
             view,
