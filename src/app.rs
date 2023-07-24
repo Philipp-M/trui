@@ -10,13 +10,17 @@ use crossterm::{
         Event as CxEvent, KeyCode, KeyEvent,
     },
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{
+        disable_raw_mode, enable_raw_mode, BeginSynchronizedUpdate, EndSynchronizedUpdate,
+        EnterAlternateScreen, LeaveAlternateScreen,
+    },
 };
 use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
 use std::{
     collections::HashSet,
     io::{stdout, Stdout, Write},
     path::PathBuf,
+    sync::Arc,
     time::Duration,
 };
 use taffy::{style::AvailableSpace, Taffy};
@@ -96,7 +100,7 @@ struct RenderResponse<V, S> {
 /// While the [`App`] follows a strict order of UIEvents -> Render -> Paint (this is simplified)
 /// the [`AppTask`] can receive different requests at any time. This enum keeps track of the state
 /// the AppTask is in because of previous requests.
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum UiState {
     /// Starting state, ready for events and render requests.
     Start,
@@ -186,7 +190,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             app_task.run().await;
         });
 
-        let cx = Cx::new(&wake_tx, rt);
+        let cx = Cx::new(&wake_tx, Arc::new(rt));
 
         App {
             req_chan: message_tx,
@@ -268,7 +272,9 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
                     height,
                 },
             );
+            execute!(stdout(), BeginSynchronizedUpdate)?;
             self.terminal.flush()?;
+            execute!(stdout(), EndSynchronizedUpdate)?;
             self.terminal.swap_buffers();
             self.terminal.backend_mut().flush()?;
         }
@@ -331,24 +337,30 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
 
         let main_loop_tracing_span = tracing::debug_span!("main loop");
         while let Some(event) = self.event_chan.blocking_recv() {
-            let quit = matches!(event, Event::Quit);
+            let mut events = vec![event];
+            // batch events
+            while let Ok(event) = self.event_chan.try_recv() {
+                events.push(event);
+            }
 
-            let cx_state = &mut CxState::new(&mut self.events);
-
-            let mut cx = EventCx {
-                is_handled: false,
-                widget_state: &mut self.root_state,
-                cx_state,
-            };
+            let quit = events.iter().any(|e| matches!(e, Event::Quit));
 
             if let Some(root_pod) = self.root_pod.as_mut() {
-                // TODO filter out some events like Event::Wake?
-                root_pod.event(&mut cx, &event);
+                let cx_state = &mut CxState::new(&mut self.events);
+
+                let mut cx = EventCx {
+                    is_handled: false,
+                    widget_state: &mut self.root_state,
+                    cx_state,
+                };
+                for event in events {
+                    // TODO filter out some events like Event::Wake?
+                    root_pod.event(&mut cx, &event);
+                }
             }
             self.send_events();
 
             self.render()?;
-
             if quit {
                 break;
             }
@@ -399,12 +411,14 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> AppTask<T, V, F> {
                                 &mut self.data,
                             );
                             needs_rebuild = matches!(result, MessageResult::RequestRebuild);
+                            tracing::debug!("Needs rebuild after wake: {needs_rebuild}");
                         }
 
                         if needs_rebuild {
                             // request re-render from UI thread
                             if self.ui_state == UiState::Start {
                                 self.ui_state = UiState::WokeUI;
+                                tracing::debug!("Sending wake event");
                                 if self.event_chan.send(Event::Wake).await.is_err() {
                                     break;
                                 }
@@ -412,6 +426,7 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> AppTask<T, V, F> {
                             let id = id_path.last().unwrap();
                             self.pending_async.remove(id);
                             if self.pending_async.is_empty() && self.ui_state == UiState::Delayed {
+                                tracing::debug!("Render with delayed ui state");
                                 self.render().await;
                                 deadline = None;
                             }
@@ -419,9 +434,14 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> AppTask<T, V, F> {
                     }
                     AppMessage::Render(delay) => {
                         if !delay || self.pending_async.is_empty() {
+                            tracing::debug!("Render without delay");
                             self.render().await;
                             deadline = None;
                         } else {
+                            tracing::debug!(
+                                "Pending async, delay rendering by {} us",
+                                RENDER_DELAY.as_micros()
+                            );
                             deadline = Some(tokio::time::Instant::now() + RENDER_DELAY);
                             self.ui_state = UiState::Delayed;
                         }
@@ -429,6 +449,7 @@ impl<T, V: View<T>, F: FnMut(&mut T) -> V> AppTask<T, V, F> {
                 },
                 Ok(None) => break,
                 Err(_) => {
+                    tracing::debug!("Render after delay");
                     self.render().await;
                     deadline = None;
                 }

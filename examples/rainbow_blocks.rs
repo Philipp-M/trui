@@ -1,17 +1,17 @@
 use anyhow::Result;
 use ratatui::style::Color;
 use trui::{
-    block, memoize, v_stack, App, BorderKind, Borders, BoxedView, Clickable, Hoverable,
-    IntoBoxedView, Styleable, View, ViewMarker,
+    block, memoize, v_stack, App, BorderKind, Borders, BoxedView, Clickable, EventHandler,
+    Hoverable, IntoBoxedView, Styleable, View, ViewMarker,
 };
 
 // TODO this basic logic (hover, styling etc.) should probably be its own widget (state)...
 pub fn button<T>(
     label: impl Into<String>,
     block_color: Color,
-    click_cb: impl Fn(&mut T) + Send,
-    hover_cb: impl Fn(&mut T) + Send,
-    hover_lost_cb: impl Fn(&mut T) + Send,
+    click_cb: impl EventHandler<T, (), ()>,
+    hover_cb: impl EventHandler<T, (), ()>,
+    hover_lost_cb: impl EventHandler<T, (), ()>,
 ) -> impl View<T> + ViewMarker + Styleable<T> {
     block(label.into())
         .with_borders(Borders::ALL)

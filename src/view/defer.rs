@@ -11,22 +11,30 @@ use super::{Cx, View, ViewMarker};
 pub struct PendingTask<T> {
     waker: Waker,
     task: Unconstrained<JoinHandle<T>>,
+    result: Option<T>,
 }
 
 impl<T> PendingTask<T> {
     fn new(waker: Waker, task: Unconstrained<JoinHandle<T>>) -> Self {
-        PendingTask { waker, task }
+        PendingTask {
+            waker,
+            task,
+            result: None,
+        }
     }
 
-    fn poll(&mut self) -> Option<T> {
+    fn poll(&mut self) -> bool {
         let mut future_cx = Context::from_waker(&self.waker);
         match Pin::new(&mut self.task).poll(&mut future_cx) {
-            Poll::Ready(Ok(v)) => Some(v),
+            Poll::Ready(Ok(v)) => {
+                self.result = Some(v);
+                true
+            }
             Poll::Ready(Err(err)) => {
                 tracing::error!("error in defer view: {err}");
-                None
+                false
             }
-            Poll::Pending => None,
+            Poll::Pending => false,
         }
     }
 }
@@ -73,10 +81,12 @@ where
         let future = (self.callback)();
         let join_handle = cx.rt.spawn(Box::pin(future));
         let task = tokio::task::unconstrained(join_handle);
+        let mut pending = true;
         let (id, (state, element)) = cx.with_new_id(|cx| {
             let waker = cx.waker();
             let mut task = PendingTask::new(waker, task);
-            if let Some(view) = task.poll() {
+            if task.poll() {
+                let view = task.result.take().unwrap();
                 let (view_id, view_state, element) = view.build(cx);
                 let state = DeferState {
                     view: Some(view),
@@ -84,6 +94,7 @@ where
                     view_state: ViewState::Resolved(view_state),
                     task,
                 };
+                pending = false;
                 (state, Box::new(element) as Box<dyn AnyWidget>)
             } else {
                 let (view_id, init_view_state, element) = self.init_view.build(cx);
@@ -96,6 +107,9 @@ where
                 (state, Box::new(element) as Box<dyn AnyWidget>)
             }
         });
+        if pending {
+            cx.add_pending_async(id);
+        }
         (id, state, element)
     }
 
@@ -107,6 +121,12 @@ where
         state: &mut Self::State,
         element: &mut Self::Element,
     ) -> ChangeFlags {
+        if state.view.is_none()
+            && matches!(state.view_state, ViewState::Init(_))
+            && state.task.poll()
+        {
+            state.view = state.task.result.take();
+        }
         if state.view.is_some() && matches!(state.view_state, ViewState::Init(_)) {
             cx.with_id(*id, |cx| {
                 let view = state.view.as_ref().unwrap();
@@ -118,6 +138,7 @@ where
             return ChangeFlags::tree_structure();
         }
         if let ViewState::Init(view_state) = &mut state.view_state {
+            cx.add_pending_async(*id);
             let element = (**element).as_any_mut().downcast_mut().unwrap();
             self.init_view
                 .rebuild(cx, &prev.init_view, &mut state.view_id, view_state, element)
@@ -136,8 +157,8 @@ where
     ) -> MessageResult<A> {
         // downcast likely not necessary, but for clarity
         if id_path.is_empty() && message.downcast_ref::<AsyncWake>().is_some() {
-            if let Some(view) = state.task.poll() {
-                state.view = Some(view);
+            if state.task.poll() {
+                state.view = state.task.result.take();
                 MessageResult::RequestRebuild
             } else {
                 MessageResult::Nop
@@ -160,7 +181,7 @@ where
     }
 }
 
-pub fn defer<T, A, V, IV, FF, F>(deferred: F, init: IV) -> Defer<T, A, V, IV, F>
+pub fn defer_view<T, A, V, IV, FF, F>(deferred: F, init: IV) -> Defer<T, A, V, IV, F>
 where
     V: View<T, A>,
     IV: View<T, A>,

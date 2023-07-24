@@ -10,13 +10,15 @@ crossterm = "0.26.1"
 rand = "0.8.5"
 taffy = { git = "https://github.com/Philipp-M/taffy.git", branch = "null-node" }
 futures-task = "0.3"
+futures-util = "0.3"
+futures = "0.3"
 tokio = { version = "1.29", features = ["full"] }
 anyhow = "1.0"
 tracing = "0.1.37"
 tracing-appender = "0.2"
 tracing-subscriber = "0.3"
 # update this when a new release occurs
-ratatui = { git = "https://github.com/tui-rs-revival/ratatui.git" }
+ratatui = "0.22"
 bitflags = "2.3.3"
 unicode-segmentation = "1.10.1"
 unicode-width = "0.1.10"

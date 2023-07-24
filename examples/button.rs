@@ -4,7 +4,7 @@ use trui::*;
 
 pub fn button<T: 'static>(
     content: impl IntoBoxedView<T>,
-    click_cb: impl Fn(&mut T) + Send + 'static,
+    click_cb: impl EventHandler<T, (), ()> + Send + 'static,
 ) -> impl View<T> + ViewMarker {
     block(content.boxed())
         .with_borders(BorderKind::ThickStraight)
@@ -18,9 +18,11 @@ fn main() -> Result<()> {
         v_stack((
             button(
                 format!("Click me to increment the count: {count}").fg(Color::Green),
-                |count| *count += 1,
+                (|count: &mut i32| *count += 1, |count: &mut i32| *count += 3),
             ),
-            button("Click me to decrement".fg(Color::Red), |count| *count -= 1),
+            button("Click me to decrement".fg(Color::Red), |count: &mut i32| {
+                *count -= 1
+            }),
         ))
     })
     .run()

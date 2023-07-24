@@ -9,17 +9,17 @@ use xilem_core::{Id, IdPath};
 xilem_core::generate_view_trait!(View, Widget, Cx, ChangeFlags; : Send);
 xilem_core::generate_viewsequence_trait! {ViewSequence, View, ViewMarker, Widget, Cx, ChangeFlags, Pod; : Send}
 xilem_core::generate_anyview_trait! {AnyView, View, ViewMarker, Cx, ChangeFlags, AnyWidget, BoxedView; + Send}
-xilem_core::generate_memoize_view! {Memoize, MemoizeState, View, ViewMarker, Cx, ChangeFlags, s, memoize}
+xilem_core::generate_memoize_view! {Memoize, MemoizeState, View, ViewMarker, Cx, ChangeFlags, s, memoize; + Send}
 
 pub struct Cx {
     id_path: IdPath,
     req_chan: SyncSender<IdPath>,
-    pub rt: Runtime,
+    pub rt: Arc<Runtime>,
     pub(crate) pending_async: HashSet<Id>,
 }
 
 impl Cx {
-    pub(crate) fn new(req_chan: &SyncSender<IdPath>, rt: Runtime) -> Self {
+    pub(crate) fn new(req_chan: &SyncSender<IdPath>, rt: Arc<Runtime>) -> Self {
         Cx {
             id_path: Vec::new(),
             req_chan: req_chan.clone(),
@@ -70,6 +70,15 @@ impl Cx {
             id_path: self.id_path.clone(),
             req_chan: self.req_chan.clone(),
         }))
+    }
+
+    /// Add an id for a pending async future.
+    ///
+    /// Rendering may be delayed when there are pending async futures, to avoid
+    /// flashing, and continues when all futures complete, or a timeout, whichever
+    /// is first.
+    pub fn add_pending_async(&mut self, id: Id) {
+        self.pending_async.insert(id);
     }
 }
 
