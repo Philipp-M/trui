@@ -66,6 +66,11 @@ impl<T, A, E: Clone + 'static, E1: EventHandler<T, A, E>, E2: EventHandler<T, A,
         cx.with_new_id(|cx| (self.0.build(cx), self.1.build(cx)))
     }
 
+    fn rebuild(&self, cx: &mut Cx, _id: &Id, state: &mut Self::State) -> ChangeFlags {
+        self.0.rebuild(cx, &state.0 .0, &mut state.0 .1)
+            | self.1.rebuild(cx, &state.1 .0, &mut state.1 .1)
+    }
+
     fn message(
         &self,
         id_path: &[xilem_core::Id],
