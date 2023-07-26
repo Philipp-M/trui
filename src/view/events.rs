@@ -1,16 +1,17 @@
-use super::{Cx, Styleable, View, ViewMarker};
+use super::{Cx, PendingTask, Styleable, View, ViewMarker};
 use crate::widget::{self, ChangeFlags, StyleableWidget, Widget};
 use futures_task::Waker;
-use futures_util::{Stream, StreamExt};
+use futures_util::{Future, Stream, StreamExt};
 use ratatui::style::{Color, Style};
 use std::{marker::PhantomData, sync::Arc};
 use tokio::{runtime::Runtime, sync::mpsc::Receiver, task::JoinHandle};
 use xilem_core::{AsyncWake, Id, MessageResult};
 
-pub trait EventHandler<T, A, E>: Send {
+pub trait EventHandler<T, A = (), E = ()>: Send {
     type State: Send;
     fn build(&self, cx: &mut Cx) -> (Id, Self::State);
 
+    // TODO should id be mutable like in View::rebuild?
     #[allow(unused)]
     fn rebuild(&self, cx: &mut Cx, id: &Id, state: &mut Self::State) -> ChangeFlags {
         ChangeFlags::empty()
@@ -35,7 +36,7 @@ pub trait EventHandler<T, A, E>: Send {
 //      to avoid having something like |&mut T, ()| {} where otherwise |&mut T| {} is sufficient (and more convenient to use)
 //      Manual implementations with custom event callbacks could probably be simplified (less boilerplate) with macros
 
-impl<T, A, F: Fn(&mut T) -> A + Send> EventHandler<T, A, ()> for F {
+impl<T, A, F: Fn(&mut T) -> A + Send> EventHandler<T, A> for F {
     type State = ();
 
     fn build(&self, _cx: &mut Cx) -> (Id, Self::State) {
@@ -237,7 +238,7 @@ where
     SI: Send + 'static,
     S: Stream<Item = SI> + Send + 'static,
     SF: Fn(&mut T, E) -> S + Send,
-    UF: Fn(&mut T, StreamMessage<SI>) -> A + Send,
+    UF: Fn(&mut T, StreamMessage<SI>) + Send,
 {
     StreamEventHandler {
         phantom: PhantomData,
@@ -246,7 +247,98 @@ where
     }
 }
 
-pub trait Hoverable<T, A, V, EH: EventHandler<T, A, ()>> {
+pub struct DeferEventHandler<T, A, FO, F, FF, CF> {
+    #[allow(clippy::complexity)]
+    phantom: PhantomData<fn() -> (T, A, FO, F)>,
+    future_fn: FF,
+    callback_fn: CF,
+}
+
+impl<T, A, FO, F, E, FF, CF> EventHandler<T, A, E> for DeferEventHandler<T, A, FO, F, FF, CF>
+where
+    E: 'static,
+    FO: Send + 'static,
+    F: Future<Output = FO> + Send + 'static,
+    FF: Fn(&mut T, E) -> F + Send,
+    CF: Fn(&mut T, FO) + Send,
+{
+    type State = (Option<PendingTask<FO>>, Arc<Runtime>, Waker);
+
+    fn build(&self, cx: &mut Cx) -> (Id, Self::State) {
+        cx.with_new_id(|cx| (None, cx.rt.clone(), cx.waker()))
+    }
+
+    fn rebuild(&self, cx: &mut Cx, id: &Id, state: &mut Self::State) -> ChangeFlags {
+        if state.0.is_some() {
+            cx.add_pending_async(*id)
+        }
+        ChangeFlags::empty()
+    }
+
+    // TODO deduplicate/"beautify" a little bit of that code below...
+    fn message(
+        &self,
+        id_path: &[xilem_core::Id],
+        state: &mut Self::State,
+        message: Box<dyn std::any::Any>,
+        app_state: &mut T,
+    ) -> MessageResult<A> {
+        if !id_path.is_empty() {
+            return MessageResult::Stale(message);
+        }
+        if message.downcast_ref::<AsyncWake>().is_some() {
+            let Some(task) = &mut state.0 else {
+                return MessageResult::Stale(message);
+            };
+            if task.poll() {
+                let Some(result) = task.result.take() else {
+                    return MessageResult::Stale(message);
+                };
+                state.0.take();
+                (self.callback_fn)(app_state, result);
+                MessageResult::RequestRebuild
+            } else {
+                MessageResult::Nop
+            }
+        } else if message.downcast_ref::<E>().is_some() {
+            let event = *message.downcast::<E>().unwrap();
+            let future = (self.future_fn)(app_state, event);
+            let join_handle = state.1.spawn(Box::pin(future));
+            let task = tokio::task::unconstrained(join_handle); // TODO really unconstrained?
+            let mut task = PendingTask::new(state.2.clone(), task);
+            if task.poll() {
+                if let Some(result) = task.result.take() {
+                    state.0.take();
+                    (self.callback_fn)(app_state, result);
+                };
+            } else {
+                state.0 = Some(task);
+            }
+            MessageResult::RequestRebuild
+        } else {
+            MessageResult::Stale(message)
+        }
+    }
+}
+
+pub fn defer<T, A, E, FO, F, FF, CF>(
+    future_fn: FF,
+    callback_fn: CF,
+) -> DeferEventHandler<T, A, FO, F, FF, CF>
+where
+    FO: Send + 'static,
+    F: Future<Output = FO> + Send + 'static,
+    FF: Fn(&mut T, E) -> F + Send,
+    CF: Fn(&mut T, FO) + Send,
+{
+    DeferEventHandler {
+        phantom: PhantomData,
+        future_fn,
+        callback_fn,
+    }
+}
+
+pub trait Hoverable<T, A, V, EH: EventHandler<T, A>> {
     fn on_hover(self, event_handler: EH) -> OnHover<T, A, V, EH>;
     fn on_blur_hover(self, event_handler: EH) -> OnHoverLost<T, A, V, EH>;
 }
@@ -254,7 +346,7 @@ pub trait Hoverable<T, A, V, EH: EventHandler<T, A, ()>> {
 impl<T, A, V, EH> Hoverable<T, A, V, EH> for V
 where
     V: View<T, A>,
-    EH: EventHandler<T, A, ()>,
+    EH: EventHandler<T, A>,
 {
     fn on_hover(self, event_handler: EH) -> OnHover<T, A, V, EH> {
         OnHover {
@@ -273,14 +365,14 @@ where
     }
 }
 
-pub trait Clickable<T, A, V, EH: EventHandler<T, A, ()>> {
+pub trait Clickable<T, A, V, EH: EventHandler<T, A>> {
     fn on_click(self, event_handler: EH) -> OnClick<T, A, V, EH>;
 }
 
 impl<T, A, V, EH> Clickable<T, A, V, EH> for V
 where
     V: View<T, A>,
-    EH: EventHandler<T, A, ()> + Send,
+    EH: EventHandler<T, A> + Send,
 {
     fn on_click(self, event_handler: EH) -> OnClick<T, A, V, EH> {
         OnClick {
@@ -544,7 +636,7 @@ macro_rules! event_views {
         impl<T, A, V, EH> View<T, A> for $name<T, A, V, EH>
         where
             V: View<T, A>,
-            EH: EventHandler<T, A, ()>,
+            EH: EventHandler<T, A>,
         {
             type State = (V::State, Id, (Id, EH::State));
 
@@ -606,7 +698,7 @@ macro_rules! event_views {
         impl<T, A, V, EH> Styleable<T, A> for $name<T, A, V, EH>
         where
             V: View<T, A> + Styleable<T, A>,
-            EH: EventHandler<T, A, ()>,
+            EH: EventHandler<T, A>,
         {
             type Output = $name<T, A, <V as Styleable<T, A>>::Output, EH>;
 
@@ -665,7 +757,7 @@ impl<T, A, V, EH> View<T, A> for OnClick<T, A, V, EH>
 where
     V: View<T, A>,
     <V as View<T, A>>::Element: 'static,
-    EH: EventHandler<T, A, ()>,
+    EH: EventHandler<T, A>,
 {
     type State = (V::State, Id, (Id, EH::State));
 
@@ -735,7 +827,7 @@ where
     V: View<T, A> + Styleable<T, A>,
     // <V as Styleable<T, A>>::Output: 'static,
     <<V as Styleable<T, A>>::Output as View<T, A>>::Element: 'static,
-    EH: EventHandler<T, A, ()>,
+    EH: EventHandler<T, A>,
 {
     type Output = OnClick<T, A, <V as Styleable<T, A>>::Output, EH>;
 

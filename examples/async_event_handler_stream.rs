@@ -2,7 +2,7 @@ use anyhow::Result;
 use futures::Stream;
 use ratatui::style::Color;
 use std::time::Duration;
-use tokio::time::interval;
+use tokio::time::{interval, sleep};
 use trui::*;
 
 pub fn words_stream(input: &str) -> impl Stream<Item = String> + Send {
@@ -29,7 +29,7 @@ pub fn words_stream(input: &str) -> impl Stream<Item = String> + Send {
 }
 
 fn main() -> Result<()> {
-    App::new(String::new(), |text| {
+    App::new(String::new(), |app_state| {
         v_stack((
             block("Click me for some non-sense")
                 .with_borders(BorderKind::Rounded)
@@ -48,20 +48,39 @@ fn main() -> Result<()> {
                             that can be accurately described as 'delayed'.",
                         )
                     },
-                    |text: &mut String, message: StreamMessage<String>| match message {
+                    |app_state: &mut String, message: StreamMessage<String>| match message {
                         StreamMessage::Begin(word) => {
-                            *text = word;
+                            *app_state = word;
                         }
                         StreamMessage::Update(word) => {
-                            *text += " ";
-                            *text += &word;
+                            *app_state += " ";
+                            *app_state += &word;
                         }
                         StreamMessage::Finished => (),
                     },
                 )),
-            block(text.clone().wrapped())
+            block("Click me for some non-sense, but only once")
+                .with_borders(BorderKind::Rounded)
+                .on_pressed_fg(Color::Green)
+                .on_click(defer(
+                    |app_state: &mut String, ()| {
+                        let app_state_empty = app_state.is_empty();
+
+                        async move {
+                            sleep(Duration::from_secs(1)).await;
+                            format!(
+                                " This message came in delayed! {}",
+                                if app_state_empty { "" } else { "again! " }
+                            )
+                        }
+                    },
+                    |app_state: &mut String, message: String| {
+                        *app_state += &message;
+                    },
+                )),
+            block(app_state.clone().wrapped())
                 .with_borders(())
-                .fg(if text.is_empty() {
+                .fg(if app_state.is_empty() {
                     Color::White
                 } else {
                     Color::Blue

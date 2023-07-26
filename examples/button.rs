@@ -4,7 +4,7 @@ use trui::*;
 
 pub fn button<T: 'static>(
     content: impl IntoBoxedView<T>,
-    click_cb: impl EventHandler<T, (), ()> + Send + 'static,
+    click_cb: impl EventHandler<T> + Send + 'static,
 ) -> impl View<T> + ViewMarker {
     block(content.boxed())
         .with_borders(BorderKind::ThickStraight)

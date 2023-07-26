@@ -9,9 +9,9 @@ use trui::{
 pub fn button<T>(
     label: impl Into<String>,
     block_color: Color,
-    click_cb: impl EventHandler<T, (), ()>,
-    hover_cb: impl EventHandler<T, (), ()>,
-    hover_lost_cb: impl EventHandler<T, (), ()>,
+    click_cb: impl EventHandler<T>,
+    hover_cb: impl EventHandler<T>,
+    hover_lost_cb: impl EventHandler<T>,
 ) -> impl View<T> + ViewMarker + Styleable<T> {
     block(label.into())
         .with_borders(Borders::ALL)

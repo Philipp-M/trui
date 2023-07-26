@@ -11,11 +11,11 @@ use super::{Cx, View, ViewMarker};
 pub struct PendingTask<T> {
     waker: Waker,
     task: Unconstrained<JoinHandle<T>>,
-    result: Option<T>,
+    pub result: Option<T>,
 }
 
 impl<T> PendingTask<T> {
-    fn new(waker: Waker, task: Unconstrained<JoinHandle<T>>) -> Self {
+    pub fn new(waker: Waker, task: Unconstrained<JoinHandle<T>>) -> Self {
         PendingTask {
             waker,
             task,
@@ -23,7 +23,7 @@ impl<T> PendingTask<T> {
         }
     }
 
-    fn poll(&mut self) -> bool {
+    pub fn poll(&mut self) -> bool {
         let mut future_cx = Context::from_waker(&self.waker);
         match Pin::new(&mut self.task).poll(&mut future_cx) {
             Poll::Ready(Ok(v)) => {
