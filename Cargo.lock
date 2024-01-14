@@ -883,4 +883,4 @@ checksum = "1a515f5799fe4961cb532f983ce2b23082366b898e52ffbce459c86f67c8378a"
 [[package]]
 name = "xilem_core"
 version = "0.1.0"
-source = "git+https://github.com/linebender/xilem.git#4409fbb8df5fd136b85297a80b93eacd76006c67"
+source = "git+https://github.com/linebender/xilem.git#ea45b9f8c14e3708f0fcbe0a0e1c760f59146323"

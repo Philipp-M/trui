@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use ratatui::style::Style;
 use taffy::tree::NodeId;
 use unicode_width::UnicodeWidthStr;
@@ -8,30 +10,31 @@ use super::{
 };
 
 pub struct Text {
-    pub(crate) text: String,
+    pub(crate) text: Cow<'static, str>,
     pub(crate) style: Style,
 }
 
 // TODO maybe a generic macro for stuff like below?
 impl Text {
-    pub fn set_text(&mut self, text: &str) -> ChangeFlags {
+    pub fn set_text(&mut self, text: Cow<'static, str>) -> ChangeFlags {
         let mut changeflags = ChangeFlags::empty();
         if self.text != text {
             changeflags.set(ChangeFlags::LAYOUT, self.text.width() != text.width());
             changeflags |= ChangeFlags::PAINT;
-            self.text = text.to_string();
+            self.text = text;
         }
         changeflags
     }
 }
 
 impl StyleableWidget for Text {
-    fn set_style(&mut self, style: Style) -> bool {
-        let changed = style != self.style;
-        if changed {
+    fn set_style(&mut self, style: Style) -> ChangeFlags {
+        if style != self.style {
             self.style = style;
+            ChangeFlags::PAINT
+        } else {
+            ChangeFlags::empty()
         }
-        changed
     }
 }
 

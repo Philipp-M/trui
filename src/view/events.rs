@@ -12,10 +12,7 @@ pub trait EventHandler<T, A = (), E = ()>: Send {
     fn build(&self, cx: &mut Cx) -> (Id, Self::State);
 
     // TODO should id be mutable like in View::rebuild?
-    #[allow(unused)]
-    fn rebuild(&self, cx: &mut Cx, id: &Id, state: &mut Self::State) -> ChangeFlags {
-        ChangeFlags::empty()
-    }
+    fn rebuild(&self, cx: &mut Cx, id: &Id, state: &mut Self::State) -> ChangeFlags;
 
     fn message(
         &self,
@@ -41,6 +38,10 @@ impl<T, A, F: Fn(&mut T) -> A + Send> EventHandler<T, A> for F {
 
     fn build(&self, _cx: &mut Cx) -> (Id, Self::State) {
         (Id::next(), ())
+    }
+
+    fn rebuild(&self, _cx: &mut Cx, _id: &Id, _state: &mut Self::State) -> ChangeFlags {
+        ChangeFlags::empty()
     }
 
     fn message(
@@ -140,7 +141,7 @@ impl<E: Send + 'static> StreamEventHandlerState<E> {
 
             while let Some(s) = stream.next().await {
                 if (stream_tx.send(Some(s)).await).is_ok() {
-                    waker.clone().wake();
+                    waker.wake_by_ref();
                 } else {
                     break;
                 }
@@ -343,47 +344,30 @@ where
     }
 }
 
-pub trait Hoverable<T, A, V, EH: EventHandler<T, A>> {
-    fn on_hover(self, event_handler: EH) -> OnHover<T, A, V, EH>;
-    fn on_blur_hover(self, event_handler: EH) -> OnHoverLost<T, A, V, EH>;
-}
-
-impl<T, A, V, EH> Hoverable<T, A, V, EH> for V
-where
-    V: View<T, A>,
-    EH: EventHandler<T, A>,
-{
-    fn on_hover(self, event_handler: EH) -> OnHover<T, A, V, EH> {
+pub trait Hoverable: Sized {
+    fn on_hover<T, A, EH: EventHandler<T, A>>(self, event_handler: EH) -> OnHover<Self, EH> {
         OnHover {
             view: self,
             event_handler,
-            phantom: PhantomData,
         }
     }
 
-    fn on_blur_hover(self, event_handler: EH) -> OnHoverLost<T, A, V, EH> {
+    fn on_blur_hover<T, A, EH: EventHandler<T, A>>(
+        self,
+        event_handler: EH,
+    ) -> OnHoverLost<Self, EH> {
         OnHoverLost {
             view: self,
             event_handler,
-            phantom: PhantomData,
         }
     }
 }
 
-pub trait Clickable<T, A, V, EH: EventHandler<T, A>> {
-    fn on_click(self, event_handler: EH) -> OnClick<T, A, V, EH>;
-}
-
-impl<T, A, V, EH> Clickable<T, A, V, EH> for V
-where
-    V: View<T, A>,
-    EH: EventHandler<T, A> + Send,
-{
-    fn on_click(self, event_handler: EH) -> OnClick<T, A, V, EH> {
+pub trait Clickable: Sized {
+    fn on_click<T, A, EH: EventHandler<T, A>>(self, event_handler: EH) -> OnClick<Self, EH> {
         OnClick {
             view: self,
             event_handler,
-            phantom: PhantomData,
         }
     }
 }
@@ -391,27 +375,26 @@ where
 macro_rules! styled_event_views {
     ($($name:ident),*) => {
         $(
-        pub struct $name<T, A, V> {
+        pub struct $name<V> {
             view: V,
             style: Style,
-            phantom: PhantomData<fn() -> (T, A)>,
         }
 
-        impl<T, A, V> ViewMarker for $name<T, A, V> {}
+        impl<V: Clickable> Clickable for $name<V> {}
+        impl<V: Hoverable> Hoverable for $name<V> {}
+        impl<V: HoverStyleable> HoverStyleable for $name<V> {}
+        impl<V: PressedStyleable> PressedStyleable for $name<V> {}
 
-        impl<T, A, V> Styleable<T, A> for $name<T, A, V>
-        where
-            V: View<T, A> + Styleable<T, A>,
-            V::Output: Styleable<T, A>,
-            <<V as Styleable<T, A>>::Output as View<T, A>>::Element: StyleableWidget + 'static,
+        impl<V> ViewMarker for $name<V> {}
+
+        impl<V: Styleable> Styleable for $name<V>
         {
-            type Output = $name<T, A, <V as Styleable<T, A>>::Output>;
+            type Output = $name<V::Output>;
 
             fn fg(self, color: ratatui::style::Color) -> Self::Output {
                 $name {
                     view: self.view.fg(color),
                     style: self.style,
-                    phantom: PhantomData,
                 }
             }
 
@@ -419,7 +402,6 @@ macro_rules! styled_event_views {
                 $name {
                     view: self.view.bg(color),
                     style: self.style,
-                    phantom: PhantomData,
                 }
             }
 
@@ -427,7 +409,6 @@ macro_rules! styled_event_views {
                 $name {
                     view: self.view.modifier(modifier),
                     style: self.style,
-                    phantom: PhantomData,
                 }
             }
 
@@ -435,7 +416,6 @@ macro_rules! styled_event_views {
                 $name {
                     view: self.view.style(style),
                     style: self.style,
-                    phantom: PhantomData,
                 }
             }
 
@@ -449,11 +429,11 @@ macro_rules! styled_event_views {
 
 // TODO is "invisible" (i.e. without id) a good idea?
 // it never should receive events (or other things) directly and is just a trait on top of any *actual* view?
-impl<T, A, VS, V> View<T, A> for StyleOnHover<T, A, V>
+impl<T, A, VS, V> View<T, A> for StyleOnHover<V>
 where
     VS: View<T, A>,
     V::Element: StyleableWidget,
-    V: View<T, A> + Styleable<T, A, Output = VS>,
+    V: View<T, A> + Styleable<Output = VS>,
 {
     type State = V::State;
 
@@ -495,11 +475,11 @@ where
     }
 }
 
-impl<T, A, VS, V> View<T, A> for StyleOnPressed<T, A, V>
+impl<T, A, VS, V> View<T, A> for StyleOnPressed<V>
 where
     VS: View<T, A>,
     V::Element: StyleableWidget + Widget + 'static,
-    V: View<T, A> + Styleable<T, A, Output = VS>,
+    V: View<T, A> + Styleable<Output = VS>,
 {
     type State = (V::State, Id);
 
@@ -562,67 +542,31 @@ where
 
 styled_event_views!(StyleOnHover, StyleOnPressed);
 
-pub trait HoverStyleable<T, A, V: View<T, A>> {
-    fn on_hover_style(self, style: Style) -> StyleOnHover<T, A, V>;
+pub trait HoverStyleable: Sized {
+    fn on_hover_style(self, style: Style) -> StyleOnHover<Self> {
+        StyleOnHover { view: self, style }
+    }
 
-    fn on_hover_fg(self, color: Color) -> StyleOnHover<T, A, V>
-    where
-        Self: Sized,
-    {
+    fn on_hover_fg(self, color: Color) -> StyleOnHover<Self> {
         self.on_hover_style(Style::default().fg(color))
     }
 
-    fn on_hover_bg(self, color: Color) -> StyleOnHover<T, A, V>
-    where
-        Self: Sized,
-    {
+    fn on_hover_bg(self, color: Color) -> StyleOnHover<Self> {
         self.on_hover_style(Style::default().bg(color))
     }
 }
 
-impl<T, A, VS, V> HoverStyleable<T, A, V> for V
-where
-    VS: View<T, A>,
-    V: View<T, A> + Styleable<T, A, Output = VS>,
-{
-    fn on_hover_style(self, style: Style) -> StyleOnHover<T, A, V> {
-        StyleOnHover {
-            view: self,
-            style,
-            phantom: PhantomData,
-        }
+pub trait PressedStyleable: Sized {
+    fn on_pressed_style(self, style: Style) -> StyleOnPressed<Self> {
+        StyleOnPressed { view: self, style }
     }
-}
 
-pub trait PressedStyleable<T, A, V: View<T, A>> {
-    fn on_pressed_style(self, style: Style) -> StyleOnPressed<T, A, V>;
-
-    fn on_pressed_fg(self, color: Color) -> StyleOnPressed<T, A, V>
-    where
-        Self: Sized,
-    {
+    fn on_pressed_fg(self, color: Color) -> StyleOnPressed<Self> {
         self.on_pressed_style(Style::default().fg(color))
     }
 
-    fn on_pressed_bg(self, color: Color) -> StyleOnPressed<T, A, V>
-    where
-        Self: Sized,
-    {
+    fn on_pressed_bg(self, color: Color) -> StyleOnPressed<Self> {
         self.on_pressed_style(Style::default().bg(color))
-    }
-}
-
-impl<T, A, VS, V> PressedStyleable<T, A, V> for V
-where
-    VS: View<T, A>,
-    V: View<T, A> + Styleable<T, A, Output = VS>,
-{
-    fn on_pressed_style(self, style: Style) -> StyleOnPressed<T, A, V> {
-        StyleOnPressed {
-            view: self,
-            style,
-            phantom: PhantomData,
-        }
     }
 }
 
@@ -630,15 +574,14 @@ where
 macro_rules! event_views {
     ($($name:ident),*) => {
         $(
-        pub struct $name<T, A, V, EH> {
+        pub struct $name<V, EH> {
             view: V,
             event_handler: EH,
-            phantom: PhantomData<fn() -> (T, A)>,
         }
 
-        impl<T, A, V, EH> ViewMarker for $name<T, A, V, EH> {}
+        impl<V, EH> ViewMarker for $name<V, EH> {}
 
-        impl<T, A, V, EH> View<T, A> for $name<T, A, V, EH>
+        impl<T, A, V, EH> View<T, A> for $name<V, EH>
         where
             V: View<T, A>,
             EH: EventHandler<T, A>,
@@ -700,18 +643,19 @@ macro_rules! event_views {
             }
         }
 
-        impl<T, A, V, EH> Styleable<T, A> for $name<T, A, V, EH>
-        where
-            V: View<T, A> + Styleable<T, A>,
-            EH: EventHandler<T, A>,
+        impl<V: Clickable, EH> Clickable for $name<V, EH> {}
+        impl<V: Hoverable, EH> Hoverable for $name<V, EH> {}
+        impl<V: HoverStyleable, EH> HoverStyleable for $name<V, EH> {}
+        impl<V: PressedStyleable, EH> PressedStyleable for $name<V, EH> {}
+
+        impl<V:  Styleable, EH> Styleable for $name<V, EH>
         {
-            type Output = $name<T, A, <V as Styleable<T, A>>::Output, EH>;
+            type Output = $name<<V as Styleable>::Output, EH>;
 
             fn fg(self, color: ratatui::style::Color) -> Self::Output {
                 $name {
                     view: self.view.fg(color),
                     event_handler: self.event_handler,
-                    phantom: PhantomData,
                 }
             }
 
@@ -719,7 +663,6 @@ macro_rules! event_views {
                 $name {
                     view: self.view.bg(color),
                     event_handler: self.event_handler,
-                    phantom: PhantomData,
                 }
             }
 
@@ -727,7 +670,6 @@ macro_rules! event_views {
                 $name {
                     view: self.view.modifier(modifier),
                     event_handler: self.event_handler,
-                    phantom: PhantomData,
                 }
             }
 
@@ -735,7 +677,6 @@ macro_rules! event_views {
                 $name {
                     view: self.view.style(style),
                     event_handler: self.event_handler,
-                    phantom: PhantomData,
                 }
             }
 
@@ -750,15 +691,14 @@ macro_rules! event_views {
 event_views!(OnHover, OnHoverLost);
 
 // TODO this should probably be generated by the macro above (but for better IDE experience and easier prototyping this not yet)
-pub struct OnClick<T, A, V, EH> {
+pub struct OnClick<V, EH> {
     view: V,
     event_handler: EH,
-    phantom: PhantomData<fn() -> (T, A)>,
 }
 
-impl<T, A, V, EH> ViewMarker for OnClick<T, A, V, EH> {}
+impl<V, EH> ViewMarker for OnClick<V, EH> {}
 
-impl<T, A, V, EH> View<T, A> for OnClick<T, A, V, EH>
+impl<T, A, V, EH> View<T, A> for OnClick<V, EH>
 where
     V: View<T, A>,
     <V as View<T, A>>::Element: 'static,
@@ -827,20 +767,18 @@ where
     }
 }
 
-impl<T, A, V, EH> Styleable<T, A> for OnClick<T, A, V, EH>
-where
-    V: View<T, A> + Styleable<T, A>,
-    // <V as Styleable<T, A>>::Output: 'static,
-    <<V as Styleable<T, A>>::Output as View<T, A>>::Element: 'static,
-    EH: EventHandler<T, A>,
-{
-    type Output = OnClick<T, A, <V as Styleable<T, A>>::Output, EH>;
+impl<V: Clickable, EH> Clickable for OnClick<V, EH> {}
+impl<V: Hoverable, EH> Hoverable for OnClick<V, EH> {}
+impl<V: HoverStyleable, EH> HoverStyleable for OnClick<V, EH> {}
+impl<V: PressedStyleable, EH> PressedStyleable for OnClick<V, EH> {}
+
+impl<V: Styleable, EH> Styleable for OnClick<V, EH> {
+    type Output = OnClick<<V as Styleable>::Output, EH>;
 
     fn fg(self, color: ratatui::style::Color) -> Self::Output {
         OnClick {
             view: self.view.fg(color),
             event_handler: self.event_handler,
-            phantom: PhantomData,
         }
     }
 
@@ -848,7 +786,6 @@ where
         OnClick {
             view: self.view.bg(color),
             event_handler: self.event_handler,
-            phantom: PhantomData,
         }
     }
 
@@ -856,7 +793,6 @@ where
         OnClick {
             view: self.view.modifier(modifier),
             event_handler: self.event_handler,
-            phantom: PhantomData,
         }
     }
 
@@ -864,7 +800,6 @@ where
         OnClick {
             view: self.view.style(style),
             event_handler: self.event_handler,
-            phantom: PhantomData,
         }
     }
 

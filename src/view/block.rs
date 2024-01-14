@@ -1,6 +1,9 @@
 use std::marker::PhantomData;
 
-use crate::widget::{self, ChangeFlags, StyleableWidget};
+use crate::{
+    widget::{self, ChangeFlags, StyleableWidget},
+    Hoverable, Clickable, PressedStyleable, HoverStyleable,
+};
 
 use super::{BorderKind, BorderStyle, BorderStyles, Borders, Cx, Styleable, View, ViewMarker};
 use ratatui::style::{Color, Style};
@@ -53,9 +56,7 @@ where
     ) -> crate::widget::ChangeFlags {
         let mut changeflags = ChangeFlags::empty();
         changeflags |= element.set_border_style(&self.border_styles);
-        if element.set_style(self.style) {
-            changeflags |= ChangeFlags::PAINT;
-        }
+        changeflags |= element.set_style(self.style);
         changeflags |= element.set_inherit_style(self.inherit_style);
         changeflags |= element.set_fill_with_bg(self.fill_with_bg);
 
@@ -90,7 +91,12 @@ where
     }
 }
 
-impl<T, A, V> Styleable<T, A> for Block<T, A, V>
+impl<T, A, V> Clickable for Block<T, A, V> {}
+impl<T, A, V> Hoverable for Block<T, A, V> {}
+impl<T, A, V> PressedStyleable for Block<T, A, V> {}
+impl<T, A, V> HoverStyleable for Block<T, A, V> {}
+
+impl<T, A, V> Styleable for Block<T, A, V>
 where
     V: View<T, A>,
     V::Element: 'static,

@@ -472,8 +472,7 @@ impl Widget for Box<dyn AnyWidget> {
 
 // TODO does that trait really make sense?
 pub trait StyleableWidget {
-    /// returns true, if it needs a repaint after setting the style (most of the time: style of the widget has changed)
-    fn set_style(&mut self, style: ratatui::style::Style) -> bool;
+    fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags;
 }
 
 // could probably be in taffy itself

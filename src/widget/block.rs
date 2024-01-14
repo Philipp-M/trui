@@ -168,12 +168,13 @@ impl Block {
 }
 
 impl StyleableWidget for Block {
-    fn set_style(&mut self, style: Style) -> bool {
-        let changed = style != self.style;
-        if changed {
+    fn set_style(&mut self, style: Style) -> ChangeFlags {
+        if style != self.style {
             self.style = style;
+            ChangeFlags::PAINT
+        } else {
+            ChangeFlags::empty()
         }
-        changed
     }
 }
 

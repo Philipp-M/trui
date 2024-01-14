@@ -6,7 +6,7 @@ use taffy::tree::NodeId;
 
 use super::{
     core::{IdPath, PaintCx, StyleableWidget},
-    Event, EventCx, LayoutCx, Message, Pod, Widget,
+    ChangeFlags, Event, EventCx, LayoutCx, Message, Pod, Widget,
 };
 
 pub struct OnClick<E> {
@@ -60,11 +60,11 @@ impl<E: Widget> Widget for OnClick<E> {
 }
 
 impl<E: Widget + StyleableWidget + 'static> StyleableWidget for OnClick<E> {
-    fn set_style(&mut self, style: ratatui::style::Style) -> bool {
+    fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags {
         self.element
             .downcast_mut::<E>()
             .map(|e| e.set_style(style))
-            .unwrap_or(true)
+            .unwrap_or(ChangeFlags::all())
     }
 }
 
@@ -203,15 +203,15 @@ impl<E: Widget + 'static> StyleOnPressed<E> {
 }
 
 impl<E: Widget + StyleableWidget + 'static> StyleableWidget for StyleOnPressed<E> {
-    fn set_style(&mut self, style: ratatui::style::Style) -> bool {
+    fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags {
         self.element
             .downcast_mut::<E>()
             .map(|e| e.set_style(style))
-            .unwrap_or(true)
+            .unwrap_or(ChangeFlags::all())
     }
 }
 
-impl<E: Widget + StyleableWidget> Widget for StyleOnPressed<E> {
+impl<E: Widget> Widget for StyleOnPressed<E> {
     fn paint(&mut self, cx: &mut PaintCx) {
         if cx.is_active() {
             cx.override_style = self.style.patch(cx.override_style);
@@ -251,7 +251,7 @@ macro_rules! styleable_widget_events {
     ($($name:ident),*) => {
     $(
     impl<E: Widget + StyleableWidget> StyleableWidget for $name<E> {
-        fn set_style(&mut self, style: ratatui::style::Style) -> bool {
+        fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags {
             self.element.set_style(style)
         }
     }

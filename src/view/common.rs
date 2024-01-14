@@ -4,8 +4,6 @@ use ratatui::{
     symbols,
 };
 
-use super::View;
-
 bitflags! {
     /// Bitflags that can be composed to set the visible borders essentially on the block widget.
     #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -99,8 +97,8 @@ pub enum BorderKind {
     ThickStraight,
 }
 
-pub trait Styleable<T, A = ()> {
-    type Output: View<T, A>;
+pub trait Styleable {
+    type Output;
     fn fg(self, color: Color) -> Self::Output;
     fn bg(self, color: Color) -> Self::Output;
     fn style(self, style: Style) -> Self::Output;

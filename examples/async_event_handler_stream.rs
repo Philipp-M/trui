@@ -33,6 +33,7 @@ fn main() -> Result<()> {
         v_stack((
             block("Click me for some non-sense")
                 .with_borders(BorderKind::Rounded)
+                .on_hover_fg(Color::Blue)
                 .on_pressed_fg(Color::Red)
                 .on_click(stream(
                     |_, ()| {
@@ -61,6 +62,7 @@ fn main() -> Result<()> {
                 )),
             block("Click me for some non-sense, but only once")
                 .with_borders(BorderKind::Rounded)
+                .on_hover_fg(Color::Blue)
                 .on_pressed_fg(Color::Green)
                 .on_click(defer(
                     |app_state: &mut String, ()| {

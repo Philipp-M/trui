@@ -2,7 +2,7 @@ use anyhow::Result;
 use ratatui::style::Color;
 use trui::{
     block, memoize, v_stack, App, BorderKind, Borders, BoxedView, Clickable, EventHandler,
-    Hoverable, IntoBoxedView, Styleable, View, ViewMarker,
+    HoverStyleable, Hoverable, IntoBoxedView, Styleable, View, ViewMarker,
 };
 
 // TODO this basic logic (hover, styling etc.) should probably be its own widget (state)...
@@ -12,7 +12,7 @@ pub fn button<T>(
     click_cb: impl EventHandler<T>,
     hover_cb: impl EventHandler<T>,
     hover_lost_cb: impl EventHandler<T>,
-) -> impl View<T> + ViewMarker + Styleable<T> {
+) -> impl View<T> + ViewMarker + Styleable {
     block(label.into())
         .with_borders(Borders::ALL)
         .fg(block_color)
@@ -21,7 +21,6 @@ pub fn button<T>(
         .on_blur_hover(hover_lost_cb)
 }
 
-// Thanks ChatGPT...
 fn rainbow(normalized_value: f32) -> Color {
     let hue = (normalized_value.min(1.0).max(0.0) * 360.0) as u32;
     let chroma = 255.0;
