@@ -3,7 +3,7 @@ pub use crossterm::event::MouseEvent;
 use crossterm::event::{KeyEvent, MouseEventKind};
 use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
 use std::{any::Any, io::Stdout, ops::DerefMut};
-use taffy::{tree::NodeId, Taffy};
+use taffy::{tree::NodeId, TaffyTree, TraversePartialTree};
 use xilem_core::{message, Id};
 
 message!(Send);
@@ -46,7 +46,7 @@ pub struct EventCx<'a, 'b> {
 pub struct LayoutCx<'a, 'b> {
     pub(crate) cx_state: &'a mut CxState<'b>,
     pub(crate) widget_state: &'a mut WidgetState,
-    pub(crate) taffy: &'a mut Taffy,
+    pub(crate) taffy: &'a mut TaffyTree,
 }
 
 pub struct PaintCx<'a, 'b> {
@@ -54,7 +54,7 @@ pub struct PaintCx<'a, 'b> {
     // TODO mutable? (xilem doesn't do this, but I think there are use cases for this...)
     pub(crate) widget_state: &'a mut WidgetState,
     pub(crate) terminal: &'a mut Terminal<CrosstermBackend<Stdout>>,
-    pub(crate) taffy: &'a mut Taffy,
+    pub(crate) taffy: &'a mut TaffyTree,
     // TODO this kinda feels hacky, find a better solution for this issue:
     // this is currently necessary because the most outer styleable widget should be able to override the style for a styleable widget
     pub(crate) override_style: ratatui::style::Style,
@@ -478,24 +478,30 @@ pub trait StyleableWidget {
 // could probably be in taffy itself
 pub(crate) fn update_layout_node(
     node: NodeId,
-    taffy: &mut taffy::Taffy,
+    taffy: &mut TaffyTree,
     children: &[NodeId],
     style: &taffy::style::Style,
 ) {
     let style_changed = style != taffy.style(node).unwrap();
-    let all_children_equal = children.len() == taffy.child_count(node).unwrap()
-        && taffy::LayoutTree::children(taffy, node)
+    let all_children_equal = children.len() == taffy.child_count(node)
+        && taffy
+            .children(node)
+            .unwrap()
+            .iter()
             .zip(children.iter())
-            .all(|(old, new)| old == *new);
+            .all(|(old, new)| old == new);
     if all_children_equal && !style_changed {
         return;
     }
     if !all_children_equal {
-        for n in taffy::LayoutTree::children(taffy, node)
+        for n in taffy
+            .children(node)
+            .unwrap()
+            .iter()
             .filter(|old_child| !children.contains(old_child))
             .collect::<Vec<_>>()
         {
-            taffy.remove(n).unwrap();
+            taffy.remove(*n).unwrap();
         }
         taffy.set_children(node, children).unwrap();
     }

@@ -604,7 +604,7 @@ macro_rules! event_views {
                 cx: &mut Cx,
                 prev: &Self,
                 id: &mut xilem_core::Id,
-        (state, child_id, (eh_id, eh_state)): &mut Self::State,
+                (state, child_id, (eh_id, eh_state)): &mut Self::State,
                 element: &mut Self::Element,
             ) -> ChangeFlags {
                 let changeflags = cx.with_id(*id, |cx| {

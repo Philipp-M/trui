@@ -23,7 +23,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use taffy::{style::AvailableSpace, Taffy};
+use taffy::{style::AvailableSpace, TaffyTree};
 use tokio::runtime::Runtime;
 use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
 use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
@@ -52,7 +52,7 @@ pub struct App<T, V: View<T>> {
     events: Vec<Message>,
     root_state: WidgetState,
     root_pod: Option<Pod>,
-    taffy: Taffy,
+    taffy: TaffyTree,
     cx: Cx,
     id: Option<Id>,
 }
@@ -203,7 +203,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             id: None,
             root_state: WidgetState::new(),
             events: Vec::new(),
-            taffy: Taffy::new(),
+            taffy: TaffyTree::new(),
         }
     }
 
