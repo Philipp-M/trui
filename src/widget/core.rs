@@ -272,7 +272,7 @@ impl Pod {
     ///
     /// In a widget hierarchy, each widget is wrapped in a `Pod`
     /// so it can participate in layout and event flow.
-    pub fn new(widget: impl Widget + 'static) -> Self {
+    pub fn new(widget: impl Widget) -> Self {
         Self::new_from_box(Box::new(widget))
     }
 
@@ -426,7 +426,7 @@ impl Pod {
     }
 }
 
-pub trait Widget {
+pub trait Widget: 'static {
     fn paint(&mut self, cx: &mut PaintCx);
 
     fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId;
@@ -442,7 +442,7 @@ pub trait AnyWidget: Widget {
     fn type_name(&self) -> &'static str;
 }
 
-impl<W: Widget + 'static> AnyWidget for W {
+impl<W: Widget> AnyWidget for W {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -471,7 +471,7 @@ impl Widget for Box<dyn AnyWidget> {
 }
 
 // TODO does that trait really make sense?
-pub trait StyleableWidget {
+pub trait StyleableWidget: Widget {
     fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags;
 }
 

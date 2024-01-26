@@ -1,26 +1,20 @@
-use std::marker::PhantomData;
-
-use crate::{
-    widget::{self, ChangeFlags, StyleableWidget},
-    Hoverable, Clickable, PressedStyleable, HoverStyleable,
-};
+use crate::widget::{self, ChangeFlags, StyleableWidget};
 
 use super::{BorderKind, BorderStyle, BorderStyles, Borders, Cx, Styleable, View, ViewMarker};
 use ratatui::style::{Color, Style};
 use xilem_core::MessageResult;
 
-pub struct Block<T, A, V> {
+pub struct Block<V> {
     content: V,
-    phantom: PhantomData<fn() -> (T, A)>,
     border_styles: BorderStyles,
     style: Style, // base style, merged on top of border style currently (overrides attributes if they are defined in border_style)
     fill_with_bg: bool,
     inherit_style: bool,
 }
 
-impl<T, A, V> ViewMarker for Block<T, A, V> {}
+impl<V> ViewMarker for Block<V> {}
 
-impl<T, A, V> View<T, A> for Block<T, A, V>
+impl<T, A, V> View<T, A> for Block<V>
 where
     V: View<T, A>,
     V::Element: 'static,
@@ -91,16 +85,9 @@ where
     }
 }
 
-impl<T, A, V> Clickable for Block<T, A, V> {}
-impl<T, A, V> Hoverable for Block<T, A, V> {}
-impl<T, A, V> PressedStyleable for Block<T, A, V> {}
-impl<T, A, V> HoverStyleable for Block<T, A, V> {}
+crate::impl_event_views!((Block), V, (), (V));
 
-impl<T, A, V> Styleable for Block<T, A, V>
-where
-    V: View<T, A>,
-    V::Element: 'static,
-{
+impl<V> Styleable for Block<V> {
     type Output = Self;
 
     fn fg(mut self, color: Color) -> Self::Output {
@@ -114,7 +101,7 @@ where
     }
 
     fn modifier(self, modifier: ratatui::style::Modifier) -> Self::Output {
-        self.style.add_modifier(modifier);
+        let _ = self.style.add_modifier(modifier);
         self
     }
 
@@ -128,7 +115,7 @@ where
     }
 }
 
-impl<T, A, V> Block<T, A, V> {
+impl<V> Block<V> {
     pub fn inherit_style(mut self, inherit: bool) -> Self {
         self.inherit_style = inherit;
         self
@@ -156,10 +143,9 @@ impl<T, A, V> Block<T, A, V> {
     }
 }
 
-pub fn block<T, A, V>(content: V) -> Block<T, A, V> {
+pub fn block<V>(content: V) -> Block<V> {
     Block {
         content,
-        phantom: PhantomData,
         border_styles: Default::default(),
         style: Style::default(),
         inherit_style: false,
@@ -167,7 +153,7 @@ pub fn block<T, A, V>(content: V) -> Block<T, A, V> {
     }
 }
 
-pub fn bordered_block<T, A, V>(content: V) -> Block<T, A, V> {
+pub fn bordered_block<V>(content: V) -> Block<V> {
     block(content).with_borders(Borders::ALL)
 }
 

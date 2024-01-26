@@ -1,5 +1,5 @@
 use super::{Cx, PendingTask, Styleable, View, ViewMarker};
-use crate::widget::{self, ChangeFlags, StyleableWidget, Widget};
+use crate::widget::{self, CatchMouseButton, ChangeFlags, StyleableWidget, Widget};
 use futures_task::Waker;
 use futures_util::{Future, Stream, StreamExt};
 use ratatui::style::{Color, Style};
@@ -7,8 +7,8 @@ use std::{marker::PhantomData, sync::Arc};
 use tokio::{runtime::Runtime, sync::mpsc::Receiver, task::JoinHandle};
 use xilem_core::{AsyncWake, Id, MessageResult};
 
-pub trait EventHandler<T, A = (), E = ()>: Send {
-    type State: Send;
+pub trait EventHandler<T, A = (), E = ()>: Send + Sync {
+    type State: Send + Sync;
     fn build(&self, cx: &mut Cx) -> (Id, Self::State);
 
     // TODO should id be mutable like in View::rebuild?
@@ -33,7 +33,7 @@ pub trait EventHandler<T, A = (), E = ()>: Send {
 //      to avoid having something like |&mut T, ()| {} where otherwise |&mut T| {} is sufficient (and more convenient to use)
 //      Manual implementations with custom event callbacks could probably be simplified (less boilerplate) with macros
 
-impl<T, A, F: Fn(&mut T) -> A + Send> EventHandler<T, A> for F {
+impl<T, A, F: Fn(&mut T) -> A + Send + Sync> EventHandler<T, A> for F {
     type State = ();
 
     fn build(&self, _cx: &mut Cx) -> (Id, Self::State) {
@@ -54,6 +54,34 @@ impl<T, A, F: Fn(&mut T) -> A + Send> EventHandler<T, A> for F {
         debug_assert!(id_path.is_empty() && event.downcast::<()>().is_ok());
         MessageResult::Action(self(app_state))
     }
+}
+
+macro_rules! impl_callback_event_handler {
+    ($event:ty) => {
+        impl<T, A, F: Fn(&mut T, $event) -> A + Send + Sync> EventHandler<T, A, $event> for F {
+            type State = ();
+
+            fn build(&self, _cx: &mut Cx) -> (Id, Self::State) {
+                (Id::next(), ())
+            }
+
+            fn rebuild(&self, _cx: &mut Cx, _id: &Id, _state: &mut Self::State) -> ChangeFlags {
+                ChangeFlags::empty()
+            }
+
+            fn message(
+                &self,
+                id_path: &[xilem_core::Id],
+                _state: &mut Self::State,
+                event: Box<dyn std::any::Any>,
+                app_state: &mut T,
+            ) -> MessageResult<A> {
+                debug_assert!(id_path.is_empty());
+                let event = event.downcast::<$event>().unwrap();
+                MessageResult::Action(self(app_state, *event))
+            }
+        }
+    };
 }
 
 /// This currently broadcasts the messages to each of the sub event handlers.
@@ -182,10 +210,10 @@ pub struct StreamEventHandler<T, A, E, S, SF, UF> {
 impl<T, A, SE, S, SF, UF, E: 'static> EventHandler<T, A, E>
     for StreamEventHandler<T, A, SE, S, SF, UF>
 where
-    SE: Send + 'static,
-    S: Stream<Item = SE> + Send + 'static,
-    SF: Fn(&mut T, E) -> S + Send,
-    UF: Fn(&mut T, StreamMessage<SE>) + Send,
+    SE: Send + Sync + 'static,
+    S: Stream<Item = SE> + Send + Sync + 'static,
+    SF: Fn(&mut T, E) -> S + Send + Sync,
+    UF: Fn(&mut T, StreamMessage<SE>) + Send + Sync,
 {
     type State = StreamEventHandlerState<SE>;
 
@@ -263,10 +291,10 @@ pub struct DeferEventHandler<T, A, FO, F, FF, CF> {
 impl<T, A, FO, F, E, FF, CF> EventHandler<T, A, E> for DeferEventHandler<T, A, FO, F, FF, CF>
 where
     E: 'static,
-    FO: Send + 'static,
-    F: Future<Output = FO> + Send + 'static,
-    FF: Fn(&mut T, E) -> F + Send,
-    CF: Fn(&mut T, FO) + Send,
+    FO: Send + Sync + 'static,
+    F: Future<Output = FO> + Send + Sync + 'static,
+    FF: Fn(&mut T, E) -> F + Send + Sync,
+    CF: Fn(&mut T, FO) + Send + Sync,
 {
     type State = (Option<PendingTask<FO>>, Arc<Runtime>, Waker);
 
@@ -344,6 +372,106 @@ where
     }
 }
 
+impl_callback_event_handler!(widget::MouseEvent);
+
+// TODO some description
+pub struct OnMouse<V, EH> {
+    view: V,
+    catch_event: CatchMouseButton,
+    event_handler: EH,
+}
+
+impl<V, EH> OnMouse<V, EH> {
+    pub fn catch_event(mut self, buttons: CatchMouseButton) -> Self {
+        self.catch_event = buttons;
+        self
+    }
+}
+
+impl<V, EH> ViewMarker for OnMouse<V, EH> {}
+
+impl<T, A, V, EH> View<T, A> for OnMouse<V, EH>
+where
+    V: View<T, A>,
+    EH: EventHandler<T, A, widget::MouseEvent>,
+{
+    type State = (V::State, Id, (Id, EH::State));
+
+    type Element = widget::OnMouse<V::Element>;
+
+    fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
+        let (id, (state, element)) = cx.with_new_id(|cx| {
+            let (child_id, state, element) = self.view.build(cx);
+
+            (
+                (state, child_id, self.event_handler.build(cx)),
+                widget::OnMouse::new(element, cx.id_path(), self.catch_event),
+            )
+        });
+        (id, state, element)
+    }
+
+    fn rebuild(
+        &self,
+        cx: &mut Cx,
+        prev: &Self,
+        id: &mut xilem_core::Id,
+        (state, child_id, (eh_id, eh_state)): &mut Self::State,
+        element: &mut Self::Element,
+    ) -> ChangeFlags {
+        let changeflags = cx.with_id(*id, |cx| {
+            self.view.rebuild(
+                cx,
+                &prev.view,
+                child_id,
+                state,
+                element.element.downcast_mut().expect(
+                    "The style on pressed content widget changed its type,\
+                     this should never happen!",
+                ),
+            )
+        });
+
+        changeflags | self.event_handler.rebuild(cx, eh_id, eh_state)
+    }
+
+    fn message(
+        &self,
+        id_path: &[xilem_core::Id],
+        (state, child_id, (event_handler_id, event_handler_state)): &mut Self::State,
+        message: Box<dyn std::any::Any>,
+        app_state: &mut T,
+    ) -> xilem_core::MessageResult<A> {
+        match id_path {
+            [first, rest_path @ ..] if first == child_id => {
+                self.view.message(rest_path, state, message, app_state)
+            }
+            [first, rest_path @ ..] if first == event_handler_id => {
+                self.event_handler
+                    .message(rest_path, event_handler_state, message, app_state)
+            }
+            [] => self
+                .event_handler
+                .message(&[], event_handler_state, message, app_state),
+            [..] => xilem_core::MessageResult::Stale(message),
+        }
+    }
+}
+
+// TODO Is this view useful at all? Should this be already abstracted (e.g. via the other views such as Hoverable, or Clickable)
+pub trait Mouse: Sized {
+    fn on_mouse<T, A, EH: EventHandler<T, A, widget::MouseEvent>>(
+        self,
+        event_handler: EH,
+    ) -> OnMouse<Self, EH> {
+        OnMouse {
+            view: self,
+            catch_event: CatchMouseButton::empty(),
+            event_handler,
+        }
+    }
+}
+
 pub trait Hoverable: Sized {
     fn on_hover<T, A, EH: EventHandler<T, A>>(self, event_handler: EH) -> OnHover<Self, EH> {
         OnHover {
@@ -372,6 +500,8 @@ pub trait Clickable: Sized {
     }
 }
 
+pub trait WithMouse: Clickable + Hoverable + HoverStyleable + PressedStyleable + Mouse {}
+
 macro_rules! styled_event_views {
     ($($name:ident),*) => {
         $(
@@ -380,10 +510,7 @@ macro_rules! styled_event_views {
             style: Style,
         }
 
-        impl<V: Clickable> Clickable for $name<V> {}
-        impl<V: Hoverable> Hoverable for $name<V> {}
-        impl<V: HoverStyleable> HoverStyleable for $name<V> {}
-        impl<V: PressedStyleable> PressedStyleable for $name<V> {}
+        $crate::impl_event_views!(($name), V, (), (V) +);
 
         impl<V> ViewMarker for $name<V> {}
 
@@ -570,6 +697,33 @@ pub trait PressedStyleable: Sized {
     }
 }
 
+/// Well this macro is a little bit cryptic, but convenient
+/// All event views are implemented for the given `$ty`
+/// Arguments are
+///
+///  - `$ty` - The name of the type that implements the event traits
+///  - `$el` - The (optional) generic parameter that represents a composed view
+///  - `$bound_vars` - optional bounds and type parameters (first bound is applied to `$el`)
+///  - `$ty_vars` - all generic parameters used in `$ty`
+///  - `$plus` - optional `+` which adds the event trait (which is implemented on `$ty`) bound to `$el`
+///
+/// # Examples
+/// 
+/// ```ignore
+/// impl_event_views!((OnClick), V, (, EH), (V, EH) +);
+/// ```
+#[macro_export]
+macro_rules! impl_event_views {
+    (($($ty:tt)*), $($el:ident)?, ($($bound_vars: tt)*), ($($ty_vars:tt)*) $($plus:tt)?) => {
+        impl<$($el:)? $($crate::view::events::Clickable $plus)? $($bound_vars)*> $crate::view::events::Clickable for $($ty)*<$($ty_vars)*> {}
+        impl<$($el:)? $($crate::view::events::Hoverable $plus)? $($bound_vars)*> $crate::view::events::Hoverable for $($ty)*<$($ty_vars)*> {}
+        impl<$($el:)? $($crate::view::events::HoverStyleable $plus)? $($bound_vars)*> $crate::view::events::HoverStyleable for $($ty)*<$($ty_vars)*> {}
+        impl<$($el:)? $($crate::view::events::PressedStyleable $plus)? $($bound_vars)*> $crate::view::events::PressedStyleable for $($ty)*<$($ty_vars)*> {}
+        impl<$($el:)? $($crate::view::events::Mouse $plus)? $($bound_vars)*> $crate::view::events::Mouse for $($ty)*<$($ty_vars)*> {}
+        impl<$($el:)? $($crate::view::events::WithMouse $plus)? $($bound_vars)*> $crate::view::events::WithMouse for $($ty)*<$($ty_vars)*> {}
+    };
+}
+
 // TODO own state (id_path etc.)
 macro_rules! event_views {
     ($($name:ident),*) => {
@@ -643,12 +797,9 @@ macro_rules! event_views {
             }
         }
 
-        impl<V: Clickable, EH> Clickable for $name<V, EH> {}
-        impl<V: Hoverable, EH> Hoverable for $name<V, EH> {}
-        impl<V: HoverStyleable, EH> HoverStyleable for $name<V, EH> {}
-        impl<V: PressedStyleable, EH> PressedStyleable for $name<V, EH> {}
+        impl_event_views!(($name), V, (, EH), (V, EH) +);
 
-        impl<V:  Styleable, EH> Styleable for $name<V, EH>
+        impl<V: Styleable, EH> Styleable for $name<V, EH>
         {
             type Output = $name<<V as Styleable>::Output, EH>;
 
@@ -767,10 +918,7 @@ where
     }
 }
 
-impl<V: Clickable, EH> Clickable for OnClick<V, EH> {}
-impl<V: Hoverable, EH> Hoverable for OnClick<V, EH> {}
-impl<V: HoverStyleable, EH> HoverStyleable for OnClick<V, EH> {}
-impl<V: PressedStyleable, EH> PressedStyleable for OnClick<V, EH> {}
+impl_event_views!((OnClick), V, (, EH), (V, EH) +);
 
 impl<V: Styleable, EH> Styleable for OnClick<V, EH> {
     type Output = OnClick<<V as Styleable>::Output, EH>;

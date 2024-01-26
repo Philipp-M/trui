@@ -6,4 +6,4 @@ mod widget;
 pub use app::App;
 pub use ratatui::style::{Color, Modifier, Style};
 pub use view::*;
-pub use widget::{Point, Rect};
+pub use widget::{CatchMouseButton, Point, Rect};

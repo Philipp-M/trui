@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bitflags::bitflags;
 use ratatui::{
     style::{Color, Modifier, Style},
@@ -104,4 +106,29 @@ pub trait Styleable {
     fn style(self, style: Style) -> Self::Output;
     fn modifier(self, modifier: Modifier) -> Self::Output;
     fn current_style(&self) -> Style;
+}
+
+// TODO not super efficient, as the content of the Arc has to be cloned, is there a better solution?
+impl<V: Styleable + Clone> Styleable for Arc<V> {
+    type Output = Arc<V::Output>;
+
+    fn fg(self, color: Color) -> Self::Output {
+        Arc::new((*self).clone().fg(color))
+    }
+
+    fn bg(self, color: Color) -> Self::Output {
+        Arc::new((*self).clone().bg(color))
+    }
+
+    fn style(self, style: Style) -> Self::Output {
+        Arc::new((*self).clone().style(style))
+    }
+
+    fn modifier(self, modifier: Modifier) -> Self::Output {
+        Arc::new((*self).clone().modifier(modifier))
+    }
+
+    fn current_style(&self) -> Style {
+        (**self).current_style()
+    }
 }

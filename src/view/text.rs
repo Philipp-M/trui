@@ -1,10 +1,7 @@
 use std::borrow::Cow;
 
 use super::{common::Styleable, Cx, View, ViewMarker};
-use crate::{
-    widget::{self, ChangeFlags, StyleableWidget},
-    Clickable, HoverStyleable, Hoverable, PressedStyleable,
-};
+use crate::widget::{self, ChangeFlags, StyleableWidget};
 use ratatui::style::{Color, Modifier, Style};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -41,14 +38,13 @@ pub struct Text {
     style: Style,
 }
 
-impl<T: Into<Text>> Clickable for T {}
-impl<T: Into<Text>> Hoverable for T {}
-impl<T: Into<Text>> PressedStyleable for T {}
-impl<T: Into<Text>> HoverStyleable for T {}
+crate::impl_event_views!((&'static str),,(),() );
+crate::impl_event_views!((Cow),,(),('static, str) );
+crate::impl_event_views!((String),,(),() );
 
 impl<T: Into<Text>> ViewMarker for T {}
 
-impl<T, A, S: Into<Text> + Clone + Send + Eq> View<T, A> for S {
+impl<T, A, S: Into<Text> + Clone + Send + Sync + Eq> View<T, A> for S {
     type State = ();
 
     type Element = widget::Text;
@@ -90,30 +86,38 @@ impl<T, A, S: Into<Text> + Clone + Send + Eq> View<T, A> for S {
     }
 }
 
-// TODO consider specialisation to avoid possibly unnecessary allocations (when e.g. using `Cow<str>` instead of `String`)
-impl<S: Into<String>> Styleable for S {
-    type Output = Text;
+#[macro_export]
+macro_rules! impl_styleable_text_views {
+    ($($ty:tt)*) => {
+        impl Styleable for $($ty)* {
+            type Output = Text;
 
-    fn fg(self, color: Color) -> Self::Output {
-        Text::from(self.into()).fg(color)
-    }
+            fn fg(self, color: Color) -> Self::Output {
+                Text::from(self).fg(color)
+            }
 
-    fn bg(self, color: Color) -> Self::Output {
-        Text::from(self.into()).bg(color)
-    }
+            fn bg(self, color: Color) -> Self::Output {
+                Text::from(self).bg(color)
+            }
 
-    fn modifier(self, modifier: Modifier) -> Self::Output {
-        Text::from(self.into()).modifier(modifier)
-    }
+            fn modifier(self, modifier: Modifier) -> Self::Output {
+                Text::from(self).modifier(modifier)
+            }
 
-    fn style(self, style: Style) -> Self::Output {
-        Text::from(self.into()).style(style)
-    }
+            fn style(self, style: Style) -> Self::Output {
+                Text::from(self).style(style)
+            }
 
-    fn current_style(&self) -> Style {
-        Style::default()
-    }
+            fn current_style(&self) -> Style {
+                Style::default()
+            }
+        }
+    };
 }
+
+impl_styleable_text_views!(&'static str);
+impl_styleable_text_views!(String);
+impl_styleable_text_views!(Cow<'static, str>);
 
 impl Styleable for Text {
     type Output = Self;

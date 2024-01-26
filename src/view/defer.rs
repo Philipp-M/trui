@@ -70,8 +70,8 @@ where
     IV: View<T, A>,
     V::Element: 'static,
     IV::Element: 'static,
-    FF: Future<Output = V> + Send + 'static,
-    F: Fn() -> FF + Send,
+    FF: Future<Output = V> + Send + Sync + 'static,
+    F: Fn() -> FF + Send + Sync,
 {
     type State = DeferState<T, A, V, IV>;
 

@@ -1,6 +1,7 @@
+use bitflags::bitflags;
 use std::marker::PhantomData;
 
-use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{MouseButton, MouseEventKind};
 use ratatui::style::Style;
 use taffy::tree::NodeId;
 
@@ -9,13 +10,136 @@ use super::{
     ChangeFlags, Event, EventCx, LayoutCx, Message, Pod, Widget,
 };
 
+#[derive(Debug)]
+/// A message representing a mouse event.
+pub struct MouseEvent {
+    pub over_element: bool,
+    pub is_active: bool,
+    pub kind: MouseEventKind,
+    pub column: u16,
+    pub row: u16,
+    pub modifiers: crossterm::event::KeyModifiers,
+}
+
+impl MouseEvent {
+    fn new(event: crossterm::event::MouseEvent, over_element: bool, is_active: bool) -> Self {
+        MouseEvent {
+            over_element,
+            is_active,
+            kind: event.kind,
+            column: event.column,
+            row: event.row,
+            modifiers: event.modifiers,
+        }
+    }
+}
+
+bitflags! {
+    #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    #[must_use]
+    pub struct CatchMouseButton: u8 {
+        const LEFT = 1;
+        const RIGHT = 2;
+        const MIDDLE = 4;
+    }
+}
+
+pub struct OnMouse<E> {
+    pub(crate) element: Pod,
+    id_path: IdPath,
+    catch_event: CatchMouseButton,
+    phantom: PhantomData<E>,
+}
+
+impl<E: Widget> OnMouse<E> {
+    pub fn new(element: E, id_path: &IdPath, catch_event: CatchMouseButton) -> Self {
+        OnMouse {
+            element: Pod::new(element),
+            id_path: id_path.clone(),
+            phantom: PhantomData,
+            catch_event,
+        }
+    }
+}
+
+impl<E: Widget> Widget for OnMouse<E> {
+    fn paint(&mut self, cx: &mut PaintCx) {
+        self.element.paint(cx, cx.rect());
+    }
+
+    fn layout(&mut self, cx: &mut LayoutCx, _prev: NodeId) -> NodeId {
+        self.element.layout(cx)
+    }
+
+    fn event(&mut self, cx: &mut EventCx, event: &Event) {
+        self.element.event(cx, event);
+
+        match event {
+            Event::Mouse(
+                event @ crossterm::event::MouseEvent {
+                    kind: MouseEventKind::Down(button),
+                    ..
+                },
+            ) => {
+                let catch_event = matches!(button, MouseButton::Left if self.catch_event.intersects(CatchMouseButton::LEFT))
+                    || matches!(button, MouseButton::Right if self.catch_event.intersects(CatchMouseButton::RIGHT))
+                    || matches!(button, MouseButton::Middle if self.catch_event.intersects(CatchMouseButton::MIDDLE));
+
+                if catch_event && cx.is_hot() {
+                    cx.set_active(true);
+                }
+
+                if cx.is_hot() {
+                    cx.add_message(Message::new(
+                        self.id_path.clone(),
+                        MouseEvent::new(*event, true, cx.is_active()),
+                    ));
+                }
+            }
+            Event::Mouse(event @ crossterm::event::MouseEvent { kind, .. }) => {
+                let is_active = cx.is_active();
+                if matches!(kind, MouseEventKind::Up(_)) {
+                    cx.set_active(false);
+                }
+                if cx.is_hot() {
+                    cx.add_message(Message::new(
+                        self.id_path.clone(),
+                        MouseEvent::new(*event, true, cx.is_active()),
+                    ));
+                // if it's not hot, and not active the event will likely not be propagated until here, but double checking doesn't hurt (much...)
+                } else if is_active {
+                    cx.add_message(Message::new(
+                        self.id_path.clone(),
+                        MouseEvent::new(*event, false, cx.is_active()),
+                    ));
+                }
+            }
+            // TODO handle other events like e.g. FocusLost
+            Event::FocusLost => {
+                // We can't be really sure, whether the mouse button was released in the outside the focus, so be conservative here...
+                cx.set_active(false);
+            }
+            _ => (),
+        }
+    }
+}
+
+impl<E: Widget + StyleableWidget> StyleableWidget for OnMouse<E> {
+    fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags {
+        self.element
+            .downcast_mut::<E>()
+            .map(|e| e.set_style(style))
+            .unwrap_or(ChangeFlags::all())
+    }
+}
+
 pub struct OnClick<E> {
     pub(crate) element: Pod,
     id_path: IdPath,
     phantom: PhantomData<E>,
 }
 
-impl<E: Widget + 'static> OnClick<E> {
+impl<E: Widget> OnClick<E> {
     pub fn new(element: E, id_path: &IdPath) -> Self {
         OnClick {
             element: Pod::new(element),
@@ -37,7 +161,7 @@ impl<E: Widget> Widget for OnClick<E> {
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
         self.element.event(cx, event);
 
-        if let Event::Mouse(MouseEvent {
+        if let Event::Mouse(crossterm::event::MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             ..
         }) = event
@@ -46,7 +170,7 @@ impl<E: Widget> Widget for OnClick<E> {
         }
 
         // TODO handle other events like e.g. FocusLost
-        if let Event::Mouse(MouseEvent {
+        if let Event::Mouse(crossterm::event::MouseEvent {
             kind: MouseEventKind::Up(MouseButton::Left),
             ..
         }) = event
@@ -59,7 +183,7 @@ impl<E: Widget> Widget for OnClick<E> {
     }
 }
 
-impl<E: Widget + StyleableWidget + 'static> StyleableWidget for OnClick<E> {
+impl<E: Widget + StyleableWidget> StyleableWidget for OnClick<E> {
     fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags {
         self.element
             .downcast_mut::<E>()
@@ -192,7 +316,7 @@ pub struct StyleOnPressed<E> {
     phantom: PhantomData<E>,
 }
 
-impl<E: Widget + 'static> StyleOnPressed<E> {
+impl<E: Widget> StyleOnPressed<E> {
     pub fn new(element: E, style: Style) -> Self {
         StyleOnPressed {
             element: Pod::new(element),
@@ -202,7 +326,7 @@ impl<E: Widget + 'static> StyleOnPressed<E> {
     }
 }
 
-impl<E: Widget + StyleableWidget + 'static> StyleableWidget for StyleOnPressed<E> {
+impl<E: Widget + StyleableWidget> StyleableWidget for StyleOnPressed<E> {
     fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags {
         self.element
             .downcast_mut::<E>()
@@ -227,14 +351,14 @@ impl<E: Widget> Widget for StyleOnPressed<E> {
         self.element.event(cx, event);
 
         match event {
-            Event::Mouse(MouseEvent {
+            Event::Mouse(crossterm::event::MouseEvent {
                 kind: MouseEventKind::Down(MouseButton::Left),
                 ..
             }) => {
                 cx.request_paint();
                 cx.set_active(cx.is_hot());
             }
-            Event::Mouse(MouseEvent {
+            Event::Mouse(crossterm::event::MouseEvent {
                 kind: MouseEventKind::Up(MouseButton::Left) | MouseEventKind::Moved,
                 ..
             })

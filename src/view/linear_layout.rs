@@ -67,3 +67,5 @@ pub fn v_stack<T, A, VT: ViewSequence<T, A>>(children: VT) -> LinearLayout<T, A,
         phantom: PhantomData,
     }
 }
+
+crate::impl_event_views!((LinearLayout),,(T, A, VT), (T, A, VT) );

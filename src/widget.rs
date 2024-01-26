@@ -10,7 +10,7 @@ pub use self::core::{
 };
 pub(crate) use self::core::{PodFlags, WidgetState};
 pub(crate) use block::Block;
-pub(crate) use events::*;
+pub use events::*;
 pub(crate) use linear_layout::LinearLayout;
 pub use ratatui::layout::Rect;
 pub(crate) use text::*;

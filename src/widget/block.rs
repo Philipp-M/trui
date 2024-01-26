@@ -103,7 +103,7 @@ pub struct Block {
 
 impl Block {
     pub(crate) fn new(
-        content: impl Widget + 'static,
+        content: impl Widget,
         border_styles: BorderStyles,
         style: Style,
         inherit_style: bool,
