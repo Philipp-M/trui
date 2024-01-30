@@ -17,6 +17,28 @@ xilem_core::generate_adapt_view! {View, Cx, ChangeFlags; + Send + Sync}
 xilem_core::generate_adapt_state_view! {View, Cx, ChangeFlags; + Send + Sync}
 xilem_core::generate_rc_view!(std::sync::Arc, View, ViewMarker, Cx, ChangeFlags, AnyView, AnyWidget; Send);
 
+// TODO this could maybe also be added directly to `View` (possibly copying the macro expanded version of it
+/// A trait that makes it possible to use core views such as [`Adapt`] in the continuation/builder style.
+pub trait ViewExt<T, A>: View<T, A> + Sized {
+    fn adapt<ParentT, ParentA, F>(self, f: F) -> Adapt<ParentT, ParentA, T, A, Self, F>
+    where
+        F: Fn(&mut ParentT, AdaptThunk<T, A, Self>) -> xilem_core::MessageResult<ParentA>
+            + Sync
+            + Send,
+    {
+        Adapt::new(f, self)
+    }
+
+    fn adapt_state<ParentT, F>(self, f: F) -> AdaptState<ParentT, T, Self, F>
+    where
+        F: Fn(&mut ParentT) -> &mut T + Send + Sync + Send,
+    {
+        AdaptState::new(f, self)
+    }
+}
+
+impl<T, A, V: View<T, A>> ViewExt<T, A> for V {}
+
 pub struct Cx {
     id_path: IdPath,
     req_chan: SyncSender<IdPath>,
@@ -104,6 +126,7 @@ pub trait IntoBoxedView<T, A = ()> {
     fn boxed(self) -> Box<dyn AnyView<T, A>>;
 }
 
+// Same as `ViewExt` here, should these be their own traits, or just additional methods to the `View` trait?
 impl<T, A, V> IntoBoxedView<T, A> for V
 where
     V: View<T, A> + 'static,
