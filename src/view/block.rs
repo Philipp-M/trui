@@ -1,20 +1,23 @@
+use std::marker::PhantomData;
+
 use crate::widget::{self, ChangeFlags, StyleableWidget};
 
 use super::{BorderKind, BorderStyle, BorderStyles, Borders, Cx, Styleable, View, ViewMarker};
 use ratatui::style::{Color, Style};
 use xilem_core::MessageResult;
 
-pub struct Block<V> {
+pub struct Block<V, T, A> {
     content: V,
     border_styles: BorderStyles,
     style: Style, // base style, merged on top of border style currently (overrides attributes if they are defined in border_style)
     fill_with_bg: bool,
     inherit_style: bool,
+    phantom: PhantomData<fn() -> (T, A)>,
 }
 
-impl<V> ViewMarker for Block<V> {}
+impl<T, A, V> ViewMarker for Block<V, T, A> {}
 
-impl<T, A, V> View<T, A> for Block<V>
+impl<T, A, V> View<T, A> for Block<V, T, A>
 where
     V: View<T, A>,
     V::Element: 'static,
@@ -85,9 +88,9 @@ where
     }
 }
 
-crate::impl_event_views!((Block), V, (), (V));
+crate::impl_event_views!((Block), V, (, T, A), (V, T, A));
 
-impl<V> Styleable for Block<V> {
+impl<V, T, A> Styleable for Block<V, T, A> {
     type Output = Self;
 
     fn fg(mut self, color: Color) -> Self::Output {
@@ -115,7 +118,7 @@ impl<V> Styleable for Block<V> {
     }
 }
 
-impl<V> Block<V> {
+impl<V, T, A> Block<V, T, A> {
     pub fn inherit_style(mut self, inherit: bool) -> Self {
         self.inherit_style = inherit;
         self
@@ -143,17 +146,18 @@ impl<V> Block<V> {
     }
 }
 
-pub fn block<V>(content: V) -> Block<V> {
+pub fn block<V, T, A>(content: V) -> Block<V, T, A> {
     Block {
         content,
         border_styles: Default::default(),
         style: Style::default(),
         inherit_style: false,
         fill_with_bg: true,
+        phantom: PhantomData
     }
 }
 
-pub fn bordered_block<V>(content: V) -> Block<V> {
+pub fn bordered_block<V, T, A>(content: V) -> Block<V, T, A> {
     block(content).with_borders(Borders::ALL)
 }
 

@@ -2,11 +2,11 @@ use anyhow::Result;
 use ratatui::style::{Color, Style};
 use trui::*;
 
-pub fn button<T: 'static>(
-    content: impl IntoBoxedView<T>,
-    click_cb: impl EventHandler<T> + Send + 'static,
+pub fn button<T>(
+    content: impl View<T>,
+    click_cb: impl EventHandler<T> + Send,
 ) -> impl View<T> + Styleable + Hoverable {
-    block(content.boxed())
+    block(content)
         .with_borders(BorderKind::ThickStraight)
         .on_hover_style(Style::default().fg(Color::Green).bg(Color::LightYellow))
         .on_pressed_fg(Color::Blue)
