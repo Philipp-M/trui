@@ -23,4 +23,5 @@ unicode-width = "0.1.11"
 
 [dev-dependencies]
 futures = "0.3"
+insta = "1.34.0"
 rand = "0.8.5"

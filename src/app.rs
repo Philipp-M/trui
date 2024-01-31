@@ -19,10 +19,10 @@ use crossterm::{
         EnterAlternateScreen, LeaveAlternateScreen,
     },
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::Terminal;
 use std::{
     collections::HashSet,
-    io::{stdout, Stdout, Write},
+    io::stdout,
     path::PathBuf,
     sync::Arc,
     time::Duration,
@@ -30,6 +30,14 @@ use std::{
 use tokio::runtime::Runtime;
 use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
 use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
+
+#[cfg(test)]
+use ratatui::backend::TestBackend;
+
+#[cfg(not(test))]
+use ratatui::backend::CrosstermBackend;
+#[cfg(not(test))]
+use std::io::{Stdout, Write};
 
 // TODO less hardcoding and cross-platform support
 fn setup_logging(log_level: tracing::Level) -> Result<tracing_appender::non_blocking::WorkerGuard> {
@@ -51,6 +59,11 @@ pub struct App<T, V: View<T>> {
     render_response_chan: tokio::sync::mpsc::Receiver<RenderResponse<V, V::State>>,
     return_chan: tokio::sync::mpsc::Sender<(V, V::State, HashSet<Id>)>,
     event_chan: tokio::sync::mpsc::Receiver<Event>,
+
+    #[cfg(test)]
+    terminal: Terminal<TestBackend>,
+
+    #[cfg(not(test))]
     terminal: Terminal<CrosstermBackend<Stdout>>,
     size: Size,
     cursor_pos: Option<Point>,
@@ -116,8 +129,13 @@ enum UiState {
 
 impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     pub fn new(data: T, app_logic: impl FnMut(&mut T) -> V + Send + 'static) -> Self {
-        let backend = CrosstermBackend::new(stdout());
-        let terminal = Terminal::new(backend).unwrap(); // TODO handle errors...
+        #[cfg(not(test))]
+        let backend = CrosstermBackend::new(stdout()); // TODO handle errors...
+
+        #[cfg(test)]
+        let backend = TestBackend::new(80, 40);
+
+        let terminal = Terminal::new(backend).unwrap();
 
         // Create a new tokio runtime. Doing it here is hacky, we should allow
         // the client to do it.
@@ -291,6 +309,8 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             self.terminal.flush()?;
             execute!(stdout(), EndSynchronizedUpdate)?;
             self.terminal.swap_buffers();
+
+            #[cfg(not(test))]
             self.terminal.backend_mut().flush()?;
         }
         Ok(())

@@ -209,3 +209,38 @@ impl Widget for Block {
         self.content.lifecycle(cx, event);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use ratatui::layout::Size;
+    use ratatui::style::Color;
+
+    use crate::test_helper::render_widget;
+    use crate::widget::Text;
+
+    use super::*;
+
+    #[test]
+    fn simple_text_test() {
+        let content = Text {
+            text: "some text".into(),
+            style: Style::default().fg(Color::Red),
+        };
+        let mut sut = Block::new(
+            content,
+            BorderStyles::default(),
+            Style::default(),
+            false,
+            false,
+        );
+
+        let terminal = render_widget(
+            Size {
+                width: 15,
+                height: 5,
+            },
+            &mut sut,
+        );
+        insta::assert_debug_snapshot!(terminal.backend().buffer());
+    }
+}
