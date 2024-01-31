@@ -99,15 +99,30 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         self.on_hover_style(Style::default().bg(color))
     }
 
-    fn on_pressed_style(self, style: Style) -> StyleOnPressed<Self> {
+    fn on_pressed_style<VS>(self, style: Style) -> StyleOnPressed<Self>
+    where
+        VS: View<T, A>,
+        Self::Element: StyleableWidget,
+        Self: Styleable<Output = VS>,
+    {
         StyleOnPressed { view: self, style }
     }
 
-    fn on_pressed_fg(self, color: Color) -> StyleOnPressed<Self> {
+    fn on_pressed_fg<VS>(self, color: Color) -> StyleOnPressed<Self>
+    where
+        VS: View<T, A>,
+        Self::Element: StyleableWidget,
+        Self: Styleable<Output = VS>,
+    {
         self.on_pressed_style(Style::default().fg(color))
     }
 
-    fn on_pressed_bg(self, color: Color) -> StyleOnPressed<Self> {
+    fn on_pressed_bg<VS>(self, color: Color) -> StyleOnPressed<Self>
+    where
+        VS: View<T, A>,
+        Self::Element: StyleableWidget,
+        Self: Styleable<Output = VS>,
+    {
         self.on_pressed_style(Style::default().bg(color))
     }
 }
