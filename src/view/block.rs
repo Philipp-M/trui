@@ -88,8 +88,6 @@ where
     }
 }
 
-crate::impl_event_views!((Block), V, (, T, A), (V, T, A));
-
 impl<V, T, A> Styleable for Block<V, T, A> {
     type Output = Self;
 
@@ -153,7 +151,7 @@ pub fn block<V, T, A>(content: V) -> Block<V, T, A> {
         style: Style::default(),
         inherit_style: false,
         fill_with_bg: true,
-        phantom: PhantomData
+        phantom: PhantomData,
     }
 }
 

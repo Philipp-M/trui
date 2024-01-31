@@ -204,9 +204,6 @@ impl<T, A, V: View<T, A>, S> View<(Handle<T>, S), A> for HandleState<V> {
     }
 }
 
-crate::impl_event_views!((HandleState), V, (), (V)+);
-crate::impl_event_views!((WithLocalState), Vo, (,Finit, F, Vi), (Finit, F, Vi, Vo)+);
-
 pub struct WithLocalState<Finit, F, Vi, Vo> {
     init: Finit,
     view: Arc<Vi>,

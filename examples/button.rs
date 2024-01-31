@@ -5,7 +5,7 @@ use trui::*;
 pub fn button<T>(
     content: impl View<T>,
     click_cb: impl EventHandler<T> + Send,
-) -> impl View<T> + Styleable + Hoverable {
+) -> impl View<T> + Styleable {
     block(content)
         .with_borders(BorderKind::ThickStraight)
         .on_hover_style(Style::default().fg(Color::Green).bg(Color::LightYellow))

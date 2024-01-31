@@ -1,8 +1,8 @@
 use anyhow::Result;
 use ratatui::style::Color;
 use trui::{
-    block, memoize, v_stack, AnyView, App, BorderKind, Borders, Clickable, EventHandler, Hoverable,
-    IntoBoxedView, Styleable, View,
+    block, memoize, v_stack, AnyView, App, BorderKind, Borders, EventHandler, IntoBoxedView,
+    Styleable, View, ViewExt,
 };
 
 // TODO this basic logic (hover, styling etc.) should probably be its own widget (state)...

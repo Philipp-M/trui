@@ -1,8 +1,8 @@
 use super::{Cx, PendingTask, Styleable, View, ViewMarker};
-use crate::widget::{self, CatchMouseButton, ChangeFlags, StyleableWidget, Widget};
+use crate::widget::{self, CatchMouseButton, ChangeFlags, StyleableWidget};
 use futures_task::Waker;
 use futures_util::{Future, Stream, StreamExt};
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use std::{marker::PhantomData, sync::Arc};
 use tokio::{runtime::Runtime, sync::mpsc::Receiver, task::JoinHandle};
 use xilem_core::{AsyncWake, Id, MessageResult};
@@ -375,10 +375,11 @@ where
 impl_callback_event_handler!(widget::MouseEvent);
 
 // TODO some description
+// TODO Is this view useful at all? Should this be already abstracted (e.g. via the other views such as Hoverable, or Clickable)
 pub struct OnMouse<V, EH> {
-    view: V,
-    catch_event: CatchMouseButton,
-    event_handler: EH,
+    pub(crate) view: V,
+    pub(crate) catch_event: CatchMouseButton,
+    pub(crate) event_handler: EH,
 }
 
 impl<V, EH> OnMouse<V, EH> {
@@ -457,60 +458,13 @@ where
         }
     }
 }
-
-// TODO Is this view useful at all? Should this be already abstracted (e.g. via the other views such as Hoverable, or Clickable)
-pub trait Mouse: Sized {
-    fn on_mouse<T, A, EH: EventHandler<T, A, widget::MouseEvent>>(
-        self,
-        event_handler: EH,
-    ) -> OnMouse<Self, EH> {
-        OnMouse {
-            view: self,
-            catch_event: CatchMouseButton::empty(),
-            event_handler,
-        }
-    }
-}
-
-pub trait Hoverable: Sized {
-    fn on_hover<T, A, EH: EventHandler<T, A>>(self, event_handler: EH) -> OnHover<Self, EH> {
-        OnHover {
-            view: self,
-            event_handler,
-        }
-    }
-
-    fn on_blur_hover<T, A, EH: EventHandler<T, A>>(
-        self,
-        event_handler: EH,
-    ) -> OnHoverLost<Self, EH> {
-        OnHoverLost {
-            view: self,
-            event_handler,
-        }
-    }
-}
-
-pub trait Clickable: Sized {
-    fn on_click<T, A, EH: EventHandler<T, A>>(self, event_handler: EH) -> OnClick<Self, EH> {
-        OnClick {
-            view: self,
-            event_handler,
-        }
-    }
-}
-
-pub trait WithMouse: Clickable + Hoverable + HoverStyleable + PressedStyleable + Mouse {}
-
 macro_rules! styled_event_views {
     ($($name:ident),*) => {
         $(
         pub struct $name<V> {
-            view: V,
-            style: Style,
+            pub(crate) view: V,
+            pub(crate) style: Style,
         }
-
-        $crate::impl_event_views!(($name), V, (), (V) +);
 
         impl<V> ViewMarker for $name<V> {}
 
@@ -605,7 +559,7 @@ where
 impl<T, A, VS, V> View<T, A> for StyleOnPressed<V>
 where
     VS: View<T, A>,
-    V::Element: StyleableWidget + Widget + 'static,
+    V::Element: StyleableWidget,
     V: View<T, A> + Styleable<Output = VS>,
 {
     type State = (V::State, Id);
@@ -669,68 +623,13 @@ where
 
 styled_event_views!(StyleOnHover, StyleOnPressed);
 
-pub trait HoverStyleable: Sized {
-    fn on_hover_style(self, style: Style) -> StyleOnHover<Self> {
-        StyleOnHover { view: self, style }
-    }
-
-    fn on_hover_fg(self, color: Color) -> StyleOnHover<Self> {
-        self.on_hover_style(Style::default().fg(color))
-    }
-
-    fn on_hover_bg(self, color: Color) -> StyleOnHover<Self> {
-        self.on_hover_style(Style::default().bg(color))
-    }
-}
-
-pub trait PressedStyleable: Sized {
-    fn on_pressed_style(self, style: Style) -> StyleOnPressed<Self> {
-        StyleOnPressed { view: self, style }
-    }
-
-    fn on_pressed_fg(self, color: Color) -> StyleOnPressed<Self> {
-        self.on_pressed_style(Style::default().fg(color))
-    }
-
-    fn on_pressed_bg(self, color: Color) -> StyleOnPressed<Self> {
-        self.on_pressed_style(Style::default().bg(color))
-    }
-}
-
-/// Well this macro is a little bit cryptic, but convenient
-/// All event views are implemented for the given `$ty`
-/// Arguments are
-///
-///  - `$ty` - The name of the type that implements the event traits
-///  - `$el` - The (optional) generic parameter that represents a composed view
-///  - `$bound_vars` - optional bounds and type parameters (first bound is applied to `$el`)
-///  - `$ty_vars` - all generic parameters used in `$ty`
-///  - `$plus` - optional `+` which adds the event trait (which is implemented on `$ty`) bound to `$el`
-///
-/// # Examples
-/// 
-/// ```ignore
-/// impl_event_views!((OnClick), V, (, EH), (V, EH) +);
-/// ```
-#[macro_export]
-macro_rules! impl_event_views {
-    (($($ty:tt)*), $($el:ident)?, ($($bound_vars: tt)*), ($($ty_vars:tt)*) $($plus:tt)?) => {
-        impl<$($el:)? $($crate::view::events::Clickable $plus)? $($bound_vars)*> $crate::view::events::Clickable for $($ty)*<$($ty_vars)*> {}
-        impl<$($el:)? $($crate::view::events::Hoverable $plus)? $($bound_vars)*> $crate::view::events::Hoverable for $($ty)*<$($ty_vars)*> {}
-        impl<$($el:)? $($crate::view::events::HoverStyleable $plus)? $($bound_vars)*> $crate::view::events::HoverStyleable for $($ty)*<$($ty_vars)*> {}
-        impl<$($el:)? $($crate::view::events::PressedStyleable $plus)? $($bound_vars)*> $crate::view::events::PressedStyleable for $($ty)*<$($ty_vars)*> {}
-        impl<$($el:)? $($crate::view::events::Mouse $plus)? $($bound_vars)*> $crate::view::events::Mouse for $($ty)*<$($ty_vars)*> {}
-        impl<$($el:)? $($crate::view::events::WithMouse $plus)? $($bound_vars)*> $crate::view::events::WithMouse for $($ty)*<$($ty_vars)*> {}
-    };
-}
-
 // TODO own state (id_path etc.)
 macro_rules! event_views {
     ($($name:ident),*) => {
         $(
         pub struct $name<V, EH> {
-            view: V,
-            event_handler: EH,
+            pub(crate) view: V,
+            pub(crate) event_handler: EH,
         }
 
         impl<V, EH> ViewMarker for $name<V, EH> {}
@@ -797,8 +696,6 @@ macro_rules! event_views {
             }
         }
 
-        impl_event_views!(($name), V, (, EH), (V, EH) +);
-
         impl<V: Styleable, EH> Styleable for $name<V, EH>
         {
             type Output = $name<<V as Styleable>::Output, EH>;
@@ -843,8 +740,8 @@ event_views!(OnHover, OnHoverLost);
 
 // TODO this should probably be generated by the macro above (but for better IDE experience and easier prototyping this not yet)
 pub struct OnClick<V, EH> {
-    view: V,
-    event_handler: EH,
+    pub(crate) view: V,
+    pub(crate) event_handler: EH,
 }
 
 impl<V, EH> ViewMarker for OnClick<V, EH> {}
@@ -917,8 +814,6 @@ where
         }
     }
 }
-
-impl_event_views!((OnClick), V, (, EH), (V, EH) +);
 
 impl<V: Styleable, EH> Styleable for OnClick<V, EH> {
     type Output = OnClick<<V as Styleable>::Output, EH>;

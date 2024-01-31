@@ -38,10 +38,6 @@ pub struct Text {
     style: Style,
 }
 
-crate::impl_event_views!((&'static str),,(),() );
-crate::impl_event_views!((Cow),,(),('static, str) );
-crate::impl_event_views!((String),,(),() );
-
 impl<T: Into<Text>> ViewMarker for T {}
 
 impl<T, A, S: Into<Text> + Clone + Send + Sync + Eq> View<T, A> for S {
