@@ -1,32 +1,26 @@
-use taffy::{
-    prelude::NodeId,
-    style::{FlexDirection, Style},
-};
+// use ratatui::{layout::Rect, prelude::layout::Size};
+
+// use crate::Point;
+
+use crate::geometry::{Axis, Size};
 
 use super::{
-    core::{update_layout_node, EventCx, PaintCx},
-    LayoutCx, Pod, Widget,
+    core::{EventCx, PaintCx},
+    BoxConstraints, LayoutCx, Pod, Widget,
 };
 
 pub struct LinearLayout {
     pub children: Vec<Pod>,
-    pub direction: FlexDirection,
-    style: Style,
+    pub spacing: f64,
+    pub axis: Axis,
 }
 
 impl LinearLayout {
-    pub(crate) fn new(children: Vec<Pod>, direction: FlexDirection) -> Self {
+    pub(crate) fn new(children: Vec<Pod>, spacing: f64, axis: Axis) -> Self {
         LinearLayout {
             children,
-            direction,
-            style: Style {
-                size: taffy::prelude::Size {
-                    width: taffy::style::Dimension::Percent(1.0),
-                    height: taffy::style::Dimension::Percent(1.0),
-                },
-                flex_direction: direction,
-                ..Default::default()
-            },
+            axis,
+            spacing,
         }
     }
 }
@@ -34,29 +28,39 @@ impl LinearLayout {
 impl Widget for LinearLayout {
     fn paint(&mut self, cx: &mut PaintCx) {
         for child in self.children.iter_mut() {
-            child.paint(cx, cx.rect());
+            child.paint(cx);
         }
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
-        let children: Vec<_> = self
-            .children
-            .iter_mut()
-            .map(|child| child.layout(cx))
-            .collect();
-        if !prev.is_null() {
-            update_layout_node(prev, cx.taffy, &children, &self.style);
-            prev
-        } else {
-            cx.taffy
-                .new_with_children(self.style.clone(), &children)
-                .unwrap()
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &BoxConstraints) -> Size {
+        let child_bc = self.axis.with_major(*bc, 0.0..f64::INFINITY);
+        let child_count = self.children.len();
+
+        let mut major_used: f64 = 0.0;
+        let mut max_minor: f64 = 0.0;
+
+        for (index, child) in self.children.iter_mut().enumerate() {
+            let size = child.layout(cx, &child_bc);
+            child.set_origin(cx, self.axis.pack(major_used, 0.0));
+            major_used += self.axis.major(size);
+            if index < child_count - 1 {
+                major_used += self.spacing;
+            }
+            max_minor = max_minor.max(self.axis.minor(size));
         }
+
+        self.axis.pack(major_used, max_minor)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &super::Event) {
         for child in &mut self.children {
             child.event(cx, event);
+        }
+    }
+
+    fn lifecycle(&mut self, cx: &mut super::core::LifeCycleCx, event: &super::LifeCycle) {
+        for child in &mut self.children {
+            child.lifecycle(cx, event);
         }
     }
 }

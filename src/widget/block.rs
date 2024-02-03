@@ -1,12 +1,19 @@
 use super::{
-    core::{update_layout_node, PaintCx},
-    ChangeFlags, Event, EventCx, Pod, StyleableWidget, Widget,
+    core::LayoutCx, core::PaintCx, BoxConstraints, ChangeFlags, Event, EventCx, Pod,
+    StyleableWidget, Widget,
 };
-use crate::view::{BorderStyles, Borders};
-use ratatui::{layout::Rect, style::Style, symbols};
-use taffy::tree::NodeId;
+use crate::{
+    geometry::{to_ratatui_rect, Point, Size},
+    view::{BorderStyles, Borders},
+};
+use ratatui::{style::Style, symbols};
 
-pub(crate) fn render_border(cx: &mut PaintCx, r: Rect, border_styles: &BorderStyles, style: Style) {
+pub(crate) fn render_border(
+    cx: &mut PaintCx,
+    r: ratatui::layout::Rect,
+    border_styles: &BorderStyles,
+    style: Style,
+) {
     use Borders as B; // unfortunately not possible to wildcard import since it's not an enum...
     if r.width == 0 || r.height == 0 {
         return;
@@ -82,7 +89,7 @@ pub(crate) fn render_border(cx: &mut PaintCx, r: Rect, border_styles: &BorderSty
     }
 }
 
-fn fill_block(cx: &mut PaintCx, r: Rect, style: Style) {
+fn fill_block(cx: &mut PaintCx, r: ratatui::layout::Rect, style: Style) {
     let buf = cx.terminal.current_buffer_mut();
 
     for x in r.x..(buf.area.width.min(r.width + r.x)) {
@@ -96,7 +103,6 @@ pub struct Block {
     pub(crate) content: Pod,
     border_styles: BorderStyles,
     style: Style,
-    layout_style: taffy::style::Style,
     fill_with_bg: bool,
     inherit_style: bool,
 }
@@ -109,31 +115,11 @@ impl Block {
         inherit_style: bool,
         fill_with_bg: bool,
     ) -> Self {
-        let pad = |b| {
-            taffy::style::LengthPercentage::Length(if border_styles.has_borders(b) {
-                1.0
-            } else {
-                0.0
-            })
-        };
         Block {
             content: Pod::new(content),
             fill_with_bg,
             style,
             inherit_style,
-            layout_style: taffy::style::Style {
-                padding: taffy::prelude::Rect {
-                    left: pad(Borders::LEFT),
-                    right: pad(Borders::RIGHT),
-                    top: pad(Borders::TOP),
-                    bottom: pad(Borders::BOTTOM),
-                },
-                size: taffy::prelude::Size {
-                    width: taffy::style::Dimension::Percent(1.0),
-                    height: taffy::style::Dimension::Percent(1.0),
-                },
-                ..Default::default()
-            },
             border_styles,
         }
     }
@@ -192,27 +178,38 @@ impl Widget for Block {
                 bg: style.bg,
                 ..Default::default()
             };
-            fill_block(cx, cx.rect(), fill_style);
+            fill_block(cx, to_ratatui_rect(cx.rect()), fill_style);
         }
 
-        render_border(cx, cx.rect(), &self.border_styles, style);
+        render_border(cx, to_ratatui_rect(cx.rect()), &self.border_styles, style);
 
-        self.content.paint(cx, cx.rect())
-    }
-
-    fn layout(&mut self, cx: &mut super::LayoutCx, prev: NodeId) -> NodeId {
-        let content = self.content.layout(cx);
-        if !prev.is_null() {
-            update_layout_node(prev, cx.taffy, &[content], &self.layout_style);
-            prev
-        } else {
-            cx.taffy
-                .new_with_children(self.layout_style.clone(), &[content])
-                .unwrap()
-        }
+        self.content.paint(cx)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
         self.content.event(cx, event)
+    }
+
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &BoxConstraints) -> Size {
+        let pad = |borders| {
+            if self.border_styles.has_borders(borders) {
+                1.0
+            } else {
+                0.0
+            }
+        };
+        let pad_left = pad(Borders::LEFT);
+        let pad_right = pad(Borders::RIGHT);
+        let pad_top = pad(Borders::TOP);
+        let pad_bottom = pad(Borders::BOTTOM);
+        let border_padding = Size::new(pad_left + pad_right, pad_top + pad_bottom);
+        let content_size = self.content.layout(cx, &bc.shrink(border_padding));
+
+        self.content.set_origin(cx, Point::new(pad_left, pad_top));
+        content_size + border_padding
+    }
+
+    fn lifecycle(&mut self, cx: &mut super::core::LifeCycleCx, event: &super::LifeCycle) {
+        self.content.lifecycle(cx, event);
     }
 }

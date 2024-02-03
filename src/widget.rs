@@ -1,16 +1,17 @@
 mod block;
+mod box_constraints;
 mod core;
 mod events;
 mod linear_layout;
 mod text;
 
 pub use self::core::{
-    AnyWidget, ChangeFlags, CxState, Event, EventCx, LayoutCx, Message, PaintCx, Pod, Point,
+    AnyWidget, ChangeFlags, CxState, Event, EventCx, LayoutCx, LifeCycleCx, Message, PaintCx, Pod,
     StyleableWidget, Widget,
 };
 pub(crate) use self::core::{PodFlags, WidgetState};
 pub(crate) use block::Block;
+pub use box_constraints::BoxConstraints;
 pub use events::*;
 pub(crate) use linear_layout::LinearLayout;
-pub use ratatui::layout::Rect;
 pub(crate) use text::*;

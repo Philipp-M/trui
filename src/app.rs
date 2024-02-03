@@ -1,6 +1,10 @@
 use crate::{
+    geometry::{Point, Size},
     view::{Cx, View},
-    widget::{CxState, Event, EventCx, LayoutCx, Message, PaintCx, Pod, PodFlags, WidgetState},
+    widget::{
+        BoxConstraints, CxState, Event, EventCx, LayoutCx, LifeCycle, LifeCycleCx, Message,
+        PaintCx, Pod, PodFlags, ViewContext, WidgetState,
+    },
 };
 use anyhow::Result;
 use crossterm::{
@@ -15,7 +19,7 @@ use crossterm::{
         EnterAlternateScreen, LeaveAlternateScreen,
     },
 };
-use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
+use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{
     collections::HashSet,
     io::{stdout, Stdout, Write},
@@ -23,7 +27,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use taffy::{style::AvailableSpace, TaffyTree};
 use tokio::runtime::Runtime;
 use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
 use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
@@ -49,10 +52,11 @@ pub struct App<T, V: View<T>> {
     return_chan: tokio::sync::mpsc::Sender<(V, V::State, HashSet<Id>)>,
     event_chan: tokio::sync::mpsc::Receiver<Event>,
     terminal: Terminal<CrosstermBackend<Stdout>>,
+    size: Size,
+    cursor_pos: Option<Point>,
     events: Vec<Message>,
     root_state: WidgetState,
     root_pod: Option<Pod>,
-    taffy: TaffyTree,
     cx: Cx,
     id: Option<Id>,
 }
@@ -198,12 +202,13 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             return_chan: return_tx,
             event_chan: event_rx,
             terminal,
+            size: Size::default(),
+            cursor_pos: None,
             root_pod: None,
             cx,
             id: None,
             root_state: WidgetState::new(),
             events: Vec::new(),
-            taffy: TaffyTree::new(),
         }
     }
 
@@ -224,33 +229,51 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
 
         let cx_state = &mut CxState::new(&mut self.events);
 
-        let needs_layout_recomputation = root_pod
-            .state
-            .flags
-            .intersects(PodFlags::REQUEST_LAYOUT | PodFlags::TREE_CHANGED);
-
         // TODO via event (Event::Resize)?
         self.terminal.autoresize()?;
 
-        let Rect { width, height, .. } = self.terminal.size()?;
+        let term_rect = self.terminal.size()?;
+        let ratatui::layout::Rect { width, height, .. } = term_rect;
+        let term_size = Size {
+            width: width as f64,
+            height: height as f64,
+        };
+
+        let needs_layout_recomputation = root_pod
+            .state
+            .flags
+            .intersects(PodFlags::REQUEST_LAYOUT | PodFlags::TREE_CHANGED)
+            || term_size != self.size;
 
         if needs_layout_recomputation {
             let _ = tracing::debug_span!("compute layout");
+            self.size = term_size;
             let mut layout_cx = LayoutCx {
-                taffy: &mut self.taffy,
                 widget_state: &mut self.root_state,
                 cx_state,
             };
-            let layout_node = root_pod.layout(&mut layout_cx);
-            self.taffy
-                .compute_layout(
-                    layout_node,
-                    taffy::prelude::Size {
-                        width: AvailableSpace::Definite(width as f32),
-                        height: AvailableSpace::Definite(height as f32),
-                    },
-                )
-                .ok();
+            let bc = BoxConstraints::tight(self.size);
+            root_pod.layout(&mut layout_cx, &bc);
+            root_pod.set_origin(&mut layout_cx, Point::ORIGIN);
+        }
+        if root_pod
+            .state
+            .flags
+            .contains(PodFlags::VIEW_CONTEXT_CHANGED)
+        {
+            let view_context = ViewContext {
+                window_origin: Point::ORIGIN,
+                // clip: Rect::from_origin_size(Point::ORIGIN, root_pod.state.size),
+                mouse_position: self.cursor_pos,
+            };
+            let mut lifecycle_cx = LifeCycleCx {
+                cx_state,
+                widget_state: &mut self.root_state,
+            };
+            root_pod.lifecycle(
+                &mut lifecycle_cx,
+                &LifeCycle::ViewContextChanged(view_context),
+            );
         }
 
         if root_pod.state.flags.intersects(PodFlags::REQUEST_PAINT) || needs_layout_recomputation {
@@ -259,19 +282,10 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
                 widget_state: &mut self.root_state,
                 cx_state,
                 terminal: &mut self.terminal,
-                taffy: &mut self.taffy,
                 override_style: ratatui::style::Style::default(),
             };
 
-            root_pod.paint(
-                &mut paint_cx,
-                Rect {
-                    x: 0,
-                    y: 0,
-                    width,
-                    height,
-                },
-            );
+            root_pod.paint(&mut paint_cx);
             execute!(stdout(), BeginSynchronizedUpdate)?;
             self.terminal.flush()?;
             execute!(stdout(), EndSynchronizedUpdate)?;

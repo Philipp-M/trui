@@ -1,13 +1,11 @@
 use std::borrow::Cow;
 
 use ratatui::style::Style;
-use taffy::tree::NodeId;
 use unicode_width::UnicodeWidthStr;
 
-use super::{
-    core::{update_layout_node, EventCx},
-    ChangeFlags, Event, LayoutCx, PaintCx, StyleableWidget, Widget,
-};
+use crate::geometry::{to_ratatui_rect, Size};
+
+use super::{core::EventCx, ChangeFlags, Event, LayoutCx, PaintCx, StyleableWidget, Widget};
 
 pub struct Text {
     pub(crate) text: Cow<'static, str>,
@@ -40,7 +38,7 @@ impl StyleableWidget for Text {
 
 impl Widget for Text {
     fn paint(&mut self, cx: &mut PaintCx) {
-        let rect = cx.rect();
+        let rect = to_ratatui_rect(cx.rect());
 
         let style = self.style.patch(cx.override_style);
 
@@ -54,52 +52,40 @@ impl Widget for Text {
         }
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
-        let style = taffy::style::Style {
-            min_size: taffy::prelude::Size {
-                width: taffy::style::Dimension::Auto,
-                height: taffy::style::Dimension::Length(1.0), // new lines seem to be ignored by the ratatui string functions
-            },
-            size: taffy::prelude::Size {
-                width: taffy::style::Dimension::Percent(1.0),
-                height: taffy::style::Dimension::Percent(1.0),
-            },
-            ..Default::default()
-        };
-        if !prev.is_null() {
-            update_layout_node(prev, cx.taffy, &[], &style);
-            prev
-        } else {
-            cx.taffy.new_leaf(style).unwrap()
+    fn layout(&mut self, _cx: &mut LayoutCx, _bc: &super::BoxConstraints) -> Size {
+        // TODO this currently violates the box constraints, this should in some way wrap, or cut off the text
+        let mut width = 0;
+        let mut height = 0;
+
+        for l in self.text.lines() {
+            width = width.max(l.width());
+            height += 1;
+        }
+
+        Size {
+            width: width as f64,
+            height: height as f64,
         }
     }
 
     fn event(&mut self, _cx: &mut EventCx, _event: &Event) {}
+
+    fn lifecycle(&mut self, _cx: &mut super::core::LifeCycleCx, _event: &super::LifeCycle) {}
 }
 
 // TODO relatively hacky naive implementation of wrapping text via flexbox
 pub struct WrappedText {
     pub(crate) words: Vec<(String, Style)>,
-    pub(crate) words_layout: Vec<NodeId>,
+    // pub(crate) words_layout: Vec<NodeId>,
     words_need_layout: bool, // TODO necessary?
-    pub(crate) base_layout: taffy::style::Style,
 }
 
 impl WrappedText {
     pub(crate) fn new(words: Vec<(String, Style)>) -> Self {
         WrappedText {
             words,
-            base_layout: taffy::style::Style {
-                size: taffy::prelude::Size {
-                    width: taffy::style::Dimension::Percent(1.0),
-                    height: taffy::style::Dimension::Percent(1.0),
-                },
-                flex_wrap: taffy::style::FlexWrap::Wrap,
-                align_content: Some(taffy::style::AlignContent::FlexStart),
-                ..Default::default()
-            },
             words_need_layout: true,
-            words_layout: Vec::new(),
+            // words_layout: Vec::new(),
         }
     }
 
@@ -115,60 +101,33 @@ impl WrappedText {
 }
 
 impl Widget for WrappedText {
-    fn paint(&mut self, cx: &mut PaintCx) {
-        let rect = cx.rect();
-        for ((word, style), node) in self.words.iter().zip(self.words_layout.iter()) {
-            let layout = cx.taffy.layout(*node).unwrap();
-            let x = rect.x + (layout.location.x as u16);
-            let y = rect.y + (layout.location.y as u16);
-            let term_size = cx.terminal.size().unwrap();
+    fn paint(&mut self, _cx: &mut PaintCx) {
+        // let rect = cx.rect();
+        // for ((word, style), node) in self.words.iter().zip(self.words_layout.iter()) {
+        //     let layout = cx.taffy.layout(*node).unwrap();
+        //     let x = rect.x + (layout.location.x as u16);
+        //     let y = rect.y + (layout.location.y as u16);
+        //     let term_size = cx.terminal.size().unwrap();
 
-            let max_width = rect
-                .width
-                .saturating_sub(layout.location.x as u16)
-                .min(term_size.width.saturating_sub(x)) as usize;
-            if max_width > 0 && y < term_size.height {
-                let style = style.patch(cx.override_style);
-                cx.terminal
-                    .current_buffer_mut()
-                    .set_stringn(x, y, word, max_width, style);
-            }
-        }
+        //     let max_width = rect
+        //         .width
+        //         .saturating_sub(layout.location.x as u16)
+        //         .min(term_size.width.saturating_sub(x)) as usize;
+        //     if max_width > 0 && y < term_size.height {
+        //         let style = style.patch(cx.override_style);
+        //         cx.terminal
+        //             .current_buffer_mut()
+        //             .set_stringn(x, y, word, max_width, style);
+        //     }
+        // }
+        todo!()
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
-        if self.words_need_layout {
-            self.words_need_layout = false;
-            for n in &self.words_layout {
-                cx.taffy.remove(*n).unwrap();
-            }
-
-            // TODO reuse memory?
-            self.words_layout = self
-                .words
-                .iter()
-                .map(|(word, _)| {
-                    cx.taffy
-                        .new_leaf(taffy::style::Style {
-                            size: taffy::prelude::Size {
-                                width: taffy::style::Dimension::Length(word.width() as f32),
-                                height: taffy::style::Dimension::Length(1.0), // TODO multi line spacers?
-                            },
-                            ..Default::default()
-                        })
-                        .unwrap()
-                })
-                .collect();
-        }
-        if !prev.is_null() {
-            update_layout_node(prev, cx.taffy, &self.words_layout, &self.base_layout);
-            prev
-        } else {
-            cx.taffy
-                .new_with_children(self.base_layout.clone(), &self.words_layout)
-                .unwrap()
-        }
+    fn layout(&mut self, _cx: &mut LayoutCx, _bc: &super::BoxConstraints) -> Size {
+        todo!()
     }
 
     fn event(&mut self, _cx: &mut EventCx, _event: &Event) {}
+
+    fn lifecycle(&mut self, _cx: &mut super::core::LifeCycleCx, _event: &super::LifeCycle) {}
 }
