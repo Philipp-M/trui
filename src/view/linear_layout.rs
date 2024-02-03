@@ -1,12 +1,15 @@
 use super::{Cx, View, ViewMarker, ViewSequence};
-use crate::widget::{self, ChangeFlags};
+use crate::{
+    geometry::Axis,
+    widget::{self, ChangeFlags},
+};
 use std::{any::Any, marker::PhantomData};
-use taffy::style::FlexDirection;
 use xilem_core::{Id, VecSplice};
 
 pub struct LinearLayout<T, A, VT> {
     children: VT,
-    direction: FlexDirection,
+    axis: Axis,
+    spacing: f64,
     phantom: PhantomData<fn() -> (T, A)>,
 }
 
@@ -20,7 +23,7 @@ impl<T, A, VT: ViewSequence<T, A>> View<T, A> for LinearLayout<T, A, VT> {
     fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Element) {
         let mut elements = vec![];
         let (id, state) = cx.with_new_id(|cx| self.children.build(cx, &mut elements));
-        let column = widget::LinearLayout::new(elements, self.direction);
+        let column = widget::LinearLayout::new(elements, self.spacing, self.axis);
         (id, state, column)
     }
 
@@ -55,7 +58,8 @@ impl<T, A, VT: ViewSequence<T, A>> View<T, A> for LinearLayout<T, A, VT> {
 pub fn h_stack<T, A, VT: ViewSequence<T, A>>(children: VT) -> LinearLayout<T, A, VT> {
     LinearLayout {
         children,
-        direction: FlexDirection::Row,
+        spacing: 0.0,
+        axis: Axis::Horizontal,
         phantom: PhantomData,
     }
 }
@@ -63,7 +67,8 @@ pub fn h_stack<T, A, VT: ViewSequence<T, A>>(children: VT) -> LinearLayout<T, A,
 pub fn v_stack<T, A, VT: ViewSequence<T, A>>(children: VT) -> LinearLayout<T, A, VT> {
     LinearLayout {
         children,
-        direction: FlexDirection::Column,
+        spacing: 0.0,
+        axis: Axis::Vertical,
         phantom: PhantomData,
     }
 }

@@ -1,9 +1,10 @@
+use super::{BoxConstraints, LifeCycle};
+use crate::geometry::{Point, Rect, Size};
 use bitflags::bitflags;
 pub use crossterm::event::MouseEvent;
 use crossterm::event::{KeyEvent, MouseEventKind};
-use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
+use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{any::Any, io::Stdout, ops::DerefMut};
-use taffy::{tree::NodeId, TaffyTree, TraversePartialTree};
 use xilem_core::{message, Id};
 
 message!(Send);
@@ -43,10 +44,20 @@ pub struct EventCx<'a, 'b> {
     pub(crate) is_handled: bool,
 }
 
+/// A mutable context provided to the [`lifecycle`] method on widgets.
+///
+/// Certain methods on this context are only meaningful during the handling of
+/// specific lifecycle events.
+///
+/// [`lifecycle`]: crate::widget::Widget::lifecycle
+pub struct LifeCycleCx<'a, 'b> {
+    pub(crate) cx_state: &'a mut CxState<'b>,
+    pub(crate) widget_state: &'a mut WidgetState,
+}
+
 pub struct LayoutCx<'a, 'b> {
     pub(crate) cx_state: &'a mut CxState<'b>,
     pub(crate) widget_state: &'a mut WidgetState,
-    pub(crate) taffy: &'a mut TaffyTree,
 }
 
 pub struct PaintCx<'a, 'b> {
@@ -54,7 +65,6 @@ pub struct PaintCx<'a, 'b> {
     // TODO mutable? (xilem doesn't do this, but I think there are use cases for this...)
     pub(crate) widget_state: &'a mut WidgetState,
     pub(crate) terminal: &'a mut Terminal<CrosstermBackend<Stdout>>,
-    pub(crate) taffy: &'a mut TaffyTree,
     // TODO this kinda feels hacky, find a better solution for this issue:
     // this is currently necessary because the most outer styleable widget should be able to override the style for a styleable widget
     pub(crate) override_style: ratatui::style::Style,
@@ -78,43 +88,62 @@ macro_rules! impl_context_method {
 // Methods on all contexts.
 //
 // These Methods return information about the widget
-impl_context_method!(EventCx<'_, '_>, LayoutCx<'_, '_>, PaintCx<'_, '_>, {
-    /// Returns whether this widget is hot.
-    ///
-    /// See [`is_hot`] for more details.
-    ///
-    /// [`is_hot`]: super::Pod::is_hot
-    pub fn is_hot(&self) -> bool {
-        self.widget_state.flags.contains(PodFlags::IS_HOT)
-    }
+impl_context_method!(
+    EventCx<'_, '_>,
+    LayoutCx<'_, '_>,
+    PaintCx<'_, '_>,
+    LifeCycleCx<'_, '_>,
+    {
+        /// Returns whether this widget is hot.
+        ///
+        /// See [`is_hot`] for more details.
+        ///
+        /// [`is_hot`]: super::Pod::is_hot
+        pub fn is_hot(&self) -> bool {
+            self.widget_state.flags.contains(PodFlags::IS_HOT)
+        }
 
-    pub fn rect(&self) -> Rect {
-        self.widget_state.rect
-    }
+        // TODO do this differently?
+        /// absolute positioned Rect
+        pub fn rect(&self) -> Rect {
+            self.widget_state.rect()
+        }
 
-    /// Returns whether this widget is active.
-    ///
-    /// See [`is_active`] for more details.
-    ///
-    /// [`is_active`]: super::Pod::is_active
-    pub fn is_active(&self) -> bool {
-        self.widget_state.flags.contains(PodFlags::IS_ACTIVE)
-    }
+        /// Returns whether this widget is active.
+        ///
+        /// See [`is_active`] for more details.
+        ///
+        /// [`is_active`]: super::Pod::is_active
+        pub fn is_active(&self) -> bool {
+            self.widget_state.flags.contains(PodFlags::IS_ACTIVE)
+        }
 
-    /// Returns `true` if any descendant is [`active`].
-    ///
-    /// [`active`]: Pod::is_active
-    pub fn has_active(&self) -> bool {
-        self.widget_state.flags.contains(PodFlags::HAS_ACTIVE)
-    }
+        /// Returns `true` if any descendant is [`active`].
+        ///
+        /// [`active`]: Pod::is_active
+        pub fn has_active(&self) -> bool {
+            self.widget_state.flags.contains(PodFlags::HAS_ACTIVE)
+        }
 
-    /// Requests a call to [`paint`] for this widget.
-    ///
-    /// [`paint`]: super::Widget::paint
-    pub fn request_paint(&mut self) {
-        self.widget_state.flags |= PodFlags::REQUEST_PAINT;
+        /// Requests a call to [`paint`] for this widget.
+        ///
+        /// [`paint`]: super::Widget::paint
+        pub fn request_paint(&mut self) {
+            self.widget_state.flags |= PodFlags::REQUEST_PAINT;
+        }
+
+        /// Notify Trui that this widgets view context changed.
+        ///
+        /// A [`LifeCycle::ViewContextChanged`] event will be scheduled.
+        /// Widgets only have to call this method in case they are changing the z-order of
+        /// overlapping children or change the clip region all other changes are tracked internally.
+        ///
+        /// [`LifeCycle::ViewContextChanged`]: super::LifeCycle::ViewContextChanged
+        pub fn view_context_changed(&mut self) {
+            self.widget_state.flags |= PodFlags::VIEW_CONTEXT_CHANGED;
+        }
     }
-});
+);
 
 // TODO add the other contexts
 // Methods on EventCx, UpdateCx, and LifeCycleCx
@@ -150,19 +179,6 @@ impl<'a, 'b> EventCx<'a, 'b> {
     pub fn is_handled(&self) -> bool {
         self.is_handled
     }
-}
-
-pub fn rect_contains(rect: &Rect, pos: Point) -> bool {
-    pos.x >= rect.x
-        && pos.y >= rect.y
-        && pos.x < (rect.x + rect.width)
-        && pos.y < (rect.y + rect.height)
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Point {
-    pub x: u16,
-    pub y: u16,
 }
 
 bitflags! {
@@ -235,11 +251,11 @@ pub(crate) struct WidgetState {
     // TODO could be useful in the future, but not needed currently...
     // pub(crate) id: Id,
     pub(crate) flags: PodFlags,
-    pub(crate) rect: Rect,
-    pub(crate) layout_node: NodeId,
-    // TODO useful?
-    // /// The origin of the parent in the window coordinate space.
-    // pub(crate) parent_window_origin: Point,
+    pub(crate) size: Size,
+    /// The origin of the child in the parent's coordinate space.
+    pub(crate) origin: Point,
+    /// The origin of the parent in the window coordinate space.
+    pub(crate) parent_window_origin: Point,
 }
 
 impl WidgetState {
@@ -248,8 +264,9 @@ impl WidgetState {
         WidgetState {
             // id,
             flags: PodFlags::INIT_FLAGS,
-            rect: Default::default(),
-            layout_node: NodeId::null(),
+            size: Default::default(),
+            origin: Default::default(),
+            parent_window_origin: Default::default(),
         }
     }
 
@@ -259,6 +276,17 @@ impl WidgetState {
 
     pub(crate) fn merge_up(&mut self, child_state: &mut WidgetState) {
         self.flags |= child_state.flags.upwards();
+    }
+
+    pub(crate) fn window_origin(&self) -> Point {
+        self.parent_window_origin + self.origin.to_vec2()
+    }
+
+    // TODO do this differently?
+    /// absolute positioned Rect
+    pub(crate) fn rect(&self) -> Rect {
+        let origin = self.window_origin();
+        Rect::new(origin.x, origin.y, self.size.width, self.size.height)
     }
 }
 
@@ -299,40 +327,64 @@ impl Pod {
         flags.upwards()
     }
 
-    pub fn layout(&mut self, cx: &mut LayoutCx) -> NodeId {
-        let node = self.state.layout_node;
-        let inner_cx = &mut LayoutCx {
-            cx_state: cx.cx_state,
-            widget_state: &mut self.state,
-            taffy: cx.taffy,
-        };
-        self.state.layout_node = self.widget.layout(inner_cx, node);
-        self.state.flags.remove(PodFlags::REQUEST_LAYOUT);
-        // TODO currently this is only relevant here, but this may change in the future...
-        self.state.flags.remove(PodFlags::TREE_CHANGED);
-        cx.widget_state.merge_up(&mut self.state);
-        self.state.layout_node
+    pub fn size(&self) -> Size {
+        self.state.size
     }
 
-    pub fn paint(&mut self, cx: &mut PaintCx, parent_rect: Rect) {
-        if cx.widget_state.layout_node == self.state.layout_node {
-            self.state.rect = parent_rect;
-        } else {
-            let r = cx.taffy.layout(self.state.layout_node).unwrap();
-            self.state.rect = Rect {
-                x: r.location.x as u16,
-                y: r.location.y as u16,
-                width: r.size.width as u16,
-                height: r.size.height as u16,
-            };
-            self.state.rect.x += parent_rect.x;
-            self.state.rect.y += parent_rect.y;
-        }
+    /// Set the origin of this widget, in the parent's coordinate space.
+    ///
+    /// A container widget should call the [`Widget::layout`] method on its children in
+    /// its own [`Widget::layout`] implementation, and then call `set_origin` to
+    /// position those children.
+    ///
+    /// The changed origin won't be fully in effect until [`LifeCycle::ViewContextChanged`] has
+    /// finished propagating. Specifically methods that depend on the widget's origin in relation
+    /// to the window will return stale results during the period after calling `set_origin` but
+    /// before [`LifeCycle::ViewContextChanged`] has finished propagating.
+    ///
+    /// The widget container can also call `set_origin` from other context, but calling `set_origin`
+    /// after the widget received [`LifeCycle::ViewContextChanged`] and before the next event results
+    /// in an inconsistent state of the widget tree.
+    pub fn set_origin(&mut self, cx: &mut LayoutCx, origin: Point) {
+        if origin != self.state.origin {
+            self.state.origin = origin;
+            // request paint is called on the parent instead of this widget, since this widget's
+            // fragment does not change.
+            cx.view_context_changed();
+            cx.request_paint();
 
+            self.state.flags.insert(PodFlags::VIEW_CONTEXT_CHANGED);
+        }
+    }
+
+    /// Propagate a layout request.
+    ///
+    /// This method calls [layout](crate::widget::Widget::layout) on the wrapped Widget. The container
+    /// widget is responsible for calling only the children which need a call to layout. These include
+    /// any Pod which has [layout_requested](Pod::layout_requested) set.
+    pub fn layout(&mut self, cx: &mut LayoutCx, bc: &BoxConstraints) -> Size {
+        let mut child_cx = LayoutCx {
+            cx_state: cx.cx_state,
+            widget_state: &mut self.state,
+        };
+        let new_size = self.widget.layout(&mut child_cx, bc);
+        if new_size != self.state.size {
+            self.state.flags.insert(PodFlags::VIEW_CONTEXT_CHANGED);
+        }
+        self.state.size = new_size;
+        // Note: here we're always doing requests for downstream processing, but if we
+        // make layout more incremental, we'll probably want to do this only if there
+        // is an actual layout change.
+        self.state.flags.insert(PodFlags::NEEDS_SET_ORIGIN);
+        self.state.flags.remove(PodFlags::REQUEST_LAYOUT);
+        cx.widget_state.merge_up(&mut self.state);
+        self.state.size
+    }
+
+    pub fn paint(&mut self, cx: &mut PaintCx) {
         let inner_cx = &mut PaintCx {
             cx_state: cx.cx_state,
             widget_state: &mut self.state,
-            taffy: cx.taffy,
             terminal: cx.terminal,
             override_style: cx.override_style,
         };
@@ -342,18 +394,27 @@ impl Pod {
     }
 
     // Return true if hot state has changed
-    fn set_hot_state(widget_state: &mut WidgetState, mouse_pos: Point) -> bool {
+    fn set_hot_state(
+        widget: &mut dyn AnyWidget,
+        widget_state: &mut WidgetState,
+        cx_state: &mut CxState,
+        mouse_pos: Option<Point>,
+    ) -> bool {
+        let rect = Rect::from_origin_size(widget_state.origin, widget_state.size);
         let had_hot = widget_state.flags.contains(PodFlags::IS_HOT);
-        let is_hot = rect_contains(&widget_state.rect, mouse_pos);
+
+        let is_hot = match mouse_pos {
+            Some(pos) => rect.contains(pos),
+            None => false,
+        };
         widget_state.flags.set(PodFlags::IS_HOT, is_hot);
         if had_hot != is_hot {
-            // TODO
-            //     let hot_changed_event = LifeCycle::HotChanged(is_hot);
-            //     let mut child_cx = LifeCycleCx {
-            //         cx_state,
-            //         widget_state,
-            //     };
-            //     widget.lifecycle(&mut child_cx, &hot_changed_event);
+            let hot_changed_event = LifeCycle::HotChanged(is_hot);
+            let mut child_cx = LifeCycleCx {
+                cx_state,
+                widget_state,
+            };
+            widget.lifecycle(&mut child_cx, &hot_changed_event);
             return true;
         }
         false
@@ -368,24 +429,39 @@ impl Pod {
         if cx.is_handled {
             return;
         }
-        // let mut modified_event = None;
+        let mut modified_event = None;
         let had_active = self.state.flags.contains(PodFlags::HAS_ACTIVE);
         let recurse = match event {
             Event::Mouse(mouse_event) => {
                 let hot_changed = Pod::set_hot_state(
+                    &mut self.widget,
                     &mut self.state,
-                    Point {
-                        x: mouse_event.column,
-                        y: mouse_event.row,
-                    },
+                    cx.cx_state,
+                    Some(Point {
+                        x: mouse_event.column as f64,
+                        y: mouse_event.row as f64,
+                    }),
                 );
-                had_active
+                if had_active
                     || self.state.flags.contains(PodFlags::IS_HOT)
                     || (hot_changed
                         && matches!(
                             mouse_event.kind,
                             MouseEventKind::Moved | MouseEventKind::Drag(_)
                         ))
+                {
+                    let mut mouse_event = *mouse_event;
+                    let (x, y) = (
+                        self.state.origin.x.round() as u16,
+                        self.state.origin.y.round() as u16,
+                    );
+                    mouse_event.column = mouse_event.column.saturating_sub(x);
+                    mouse_event.row = mouse_event.row.saturating_sub(y);
+                    modified_event = Some(Event::Mouse(mouse_event));
+                    true
+                } else {
+                    false
+                }
             }
             Event::Resize { .. } => {
                 // TODO for now request repaint and relayout for resize events for *every* widget,
@@ -407,20 +483,69 @@ impl Pod {
             _ => return,
         };
         if recurse {
+            // This clears the has_active state. Pod needs to clear this state since merge up can
+            // only set flags.
+            // This needs to happen before the `event` call, as that will also set our `HAS_ACTIVE`
+            // flag if any of our children were active
+            self.state.flags.set(
+                PodFlags::HAS_ACTIVE,
+                self.state.flags.contains(PodFlags::IS_ACTIVE),
+            );
             let mut inner_cx = EventCx {
                 cx_state: cx.cx_state,
                 widget_state: &mut self.state,
                 is_handled: false,
             };
-            self.widget.event(&mut inner_cx, event);
+            self.widget
+                .event(&mut inner_cx, modified_event.as_ref().unwrap_or(event));
             cx.is_handled |= inner_cx.is_handled;
 
-            // This clears the has_active state. Pod needs to clear this state since merge up can
-            // only set flags.
-            self.state.flags.set(
-                PodFlags::HAS_ACTIVE,
-                self.state.flags.contains(PodFlags::IS_ACTIVE),
-            );
+            cx.widget_state.merge_up(&mut self.state);
+        }
+    }
+
+    /// Propagate a lifecycle event.
+    ///
+    /// This method calls [lifecycle](crate::widget::Widget::lifecycle) on the wrapped Widget if
+    /// the lifecycle event is relevant to this widget.
+    pub fn lifecycle(&mut self, cx: &mut LifeCycleCx, event: &LifeCycle) {
+        let mut modified_event = None;
+        let recurse = match event {
+            LifeCycle::HotChanged(_) => false,
+            LifeCycle::ViewContextChanged(view) => {
+                self.state.parent_window_origin = view.window_origin;
+
+                Pod::set_hot_state(
+                    &mut self.widget,
+                    &mut self.state,
+                    cx.cx_state,
+                    view.mouse_position,
+                );
+                modified_event = Some(LifeCycle::ViewContextChanged(
+                    view.translate_to(self.state.origin),
+                ));
+                self.state.flags.remove(PodFlags::VIEW_CONTEXT_CHANGED);
+                true
+            }
+            LifeCycle::TreeUpdate => {
+                // TODO...
+                if self.state.flags.contains(PodFlags::TREE_CHANGED) {
+                    // self.state.sub_tree.clear();
+                    // self.state.sub_tree.add(&self.state.id);
+                    self.state.flags.remove(PodFlags::TREE_CHANGED);
+                    true
+                } else {
+                    false
+                }
+            }
+        };
+        let mut child_cx = LifeCycleCx {
+            cx_state: cx.cx_state,
+            widget_state: &mut self.state,
+        };
+        if recurse {
+            self.widget
+                .lifecycle(&mut child_cx, modified_event.as_ref().unwrap_or(event));
             cx.widget_state.merge_up(&mut self.state);
         }
     }
@@ -429,7 +554,38 @@ impl Pod {
 pub trait Widget: 'static {
     fn paint(&mut self, cx: &mut PaintCx);
 
-    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId;
+    /// Compute layout.
+    ///
+    /// A leaf widget should determine its size (subject to the provided
+    /// constraints) and return it.
+    ///
+    /// A container widget will recursively call [`WidgetPod::layout`] on its
+    /// child widgets, providing each of them an appropriate box constraint,
+    /// compute layout, then call [`set_origin`] on each of its children.
+    /// Finally, it should return the size of the container. The container
+    /// can recurse in any order, which can be helpful to, for example, compute
+    /// the size of non-flex widgets first, to determine the amount of space
+    /// available for the flex widgets.
+    ///
+    /// For efficiency, a container should only invoke layout of a child widget
+    /// once, though there is nothing enforcing this.
+    ///
+    /// The layout strategy is strongly inspired by Flutter.
+    ///
+    /// [`WidgetPod::layout`]: struct.WidgetPod.html#method.layout
+    /// [`set_origin`]: struct.WidgetPod.html#method.set_origin
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &BoxConstraints) -> Size;
+
+    /// Handle a life cycle notification.
+    ///
+    /// This method is called to notify your widget of certain special events,
+    /// (available in the [`LifeCycle`] enum) that are generally related to
+    /// changes in the widget graph or in the state of your specific widget.
+    ///
+    /// [`LifeCycle`]: enum.LifeCycle.html
+    /// [`LifeCycleCx`]: struct.LifeCycleCx.html
+    /// [`Command`]: struct.Command.html
+    fn lifecycle(&mut self, cx: &mut LifeCycleCx, event: &LifeCycle);
 
     fn event(&mut self, cx: &mut EventCx, event: &Event);
 }
@@ -461,51 +617,20 @@ impl Widget for Box<dyn AnyWidget> {
         self.deref_mut().paint(cx)
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
-        self.deref_mut().layout(cx, prev)
-    }
-
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
         self.deref_mut().event(cx, event)
+    }
+
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &BoxConstraints) -> Size {
+        self.deref_mut().layout(cx, bc)
+    }
+
+    fn lifecycle(&mut self, cx: &mut LifeCycleCx, event: &LifeCycle) {
+        self.deref_mut().lifecycle(cx, event)
     }
 }
 
 // TODO does that trait really make sense?
 pub trait StyleableWidget: Widget {
     fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags;
-}
-
-// could probably be in taffy itself
-pub(crate) fn update_layout_node(
-    node: NodeId,
-    taffy: &mut TaffyTree,
-    children: &[NodeId],
-    style: &taffy::style::Style,
-) {
-    let style_changed = style != taffy.style(node).unwrap();
-    let all_children_equal = children.len() == taffy.child_count(node)
-        && taffy
-            .children(node)
-            .unwrap()
-            .iter()
-            .zip(children.iter())
-            .all(|(old, new)| old == new);
-    if all_children_equal && !style_changed {
-        return;
-    }
-    if !all_children_equal {
-        for n in taffy
-            .children(node)
-            .unwrap()
-            .iter()
-            .filter(|old_child| !children.contains(old_child))
-            .collect::<Vec<_>>()
-        {
-            taffy.remove(*n).unwrap();
-        }
-        taffy.set_children(node, children).unwrap();
-    }
-    if style_changed {
-        taffy.set_style(node, style.clone()).unwrap();
-    }
 }

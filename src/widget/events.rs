@@ -1,14 +1,46 @@
 use bitflags::bitflags;
 use std::marker::PhantomData;
 
+use crate::geometry::{Point, Size};
 use crossterm::event::{MouseButton, MouseEventKind};
 use ratatui::style::Style;
-use taffy::tree::NodeId;
 
 use super::{
     core::{IdPath, PaintCx, StyleableWidget},
     ChangeFlags, Event, EventCx, LayoutCx, Message, Pod, Widget,
 };
+
+#[derive(Debug)]
+pub enum LifeCycle {
+    HotChanged(bool),
+    ViewContextChanged(ViewContext),
+    TreeUpdate,
+}
+
+#[derive(Debug)]
+pub struct ViewContext {
+    pub window_origin: Point,
+    // pub clip: Rect,
+    pub mouse_position: Option<Point>,
+}
+
+impl ViewContext {
+    pub fn translate_to(&self, new_origin: Point) -> ViewContext {
+        // TODO I think the clip calculation is buggy in xilem (width/height?)
+        // let clip = Rect {
+        //     x: self.clip.x - new_origin.x,
+        //     y: self.clip.y - new_origin.y,
+        //     width: self.clip.width,
+        //     height: self.clip.height,
+        // };
+        let translate = new_origin.to_vec2();
+        ViewContext {
+            window_origin: self.window_origin + translate,
+            // clip,
+            mouse_position: self.mouse_position.map(|p| p - translate),
+        }
+    }
+}
 
 #[derive(Debug)]
 /// A message representing a mouse event.
@@ -64,11 +96,11 @@ impl<E: Widget> OnMouse<E> {
 
 impl<E: Widget> Widget for OnMouse<E> {
     fn paint(&mut self, cx: &mut PaintCx) {
-        self.element.paint(cx, cx.rect());
+        self.element.paint(cx);
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, _prev: NodeId) -> NodeId {
-        self.element.layout(cx)
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> Size {
+        self.element.layout(cx, bc)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
@@ -122,6 +154,10 @@ impl<E: Widget> Widget for OnMouse<E> {
             _ => (),
         }
     }
+
+    fn lifecycle(&mut self, cx: &mut super::core::LifeCycleCx, event: &LifeCycle) {
+        self.element.lifecycle(cx, event);
+    }
 }
 
 impl<E: Widget + StyleableWidget> StyleableWidget for OnMouse<E> {
@@ -151,11 +187,11 @@ impl<E: Widget> OnClick<E> {
 
 impl<E: Widget> Widget for OnClick<E> {
     fn paint(&mut self, cx: &mut PaintCx) {
-        self.element.paint(cx, cx.rect());
+        self.element.paint(cx);
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, _prev: NodeId) -> NodeId {
-        self.element.layout(cx)
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> Size {
+        self.element.layout(cx, bc)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
@@ -180,6 +216,10 @@ impl<E: Widget> Widget for OnClick<E> {
             }
             cx.set_active(false);
         }
+    }
+
+    fn lifecycle(&mut self, cx: &mut super::core::LifeCycleCx, event: &LifeCycle) {
+        self.element.lifecycle(cx, event);
     }
 }
 
@@ -213,8 +253,8 @@ impl<E: Widget> Widget for OnHover<E> {
         self.element.paint(cx);
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
-        self.element.layout(cx, prev)
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> Size {
+        self.element.layout(cx, bc)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
@@ -228,6 +268,10 @@ impl<E: Widget> Widget for OnHover<E> {
                 self.is_hovering = false;
             }
         }
+    }
+
+    fn lifecycle(&mut self, cx: &mut super::core::LifeCycleCx, event: &LifeCycle) {
+        self.element.lifecycle(cx, event);
     }
 }
 
@@ -252,8 +296,8 @@ impl<E: Widget> Widget for OnHoverLost<E> {
         self.element.paint(cx);
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
-        self.element.layout(cx, prev)
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> Size {
+        self.element.layout(cx, bc)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
@@ -267,6 +311,10 @@ impl<E: Widget> Widget for OnHoverLost<E> {
                 cx.add_message(Message::new(self.id_path.clone(), ()));
             }
         }
+    }
+
+    fn lifecycle(&mut self, cx: &mut super::core::LifeCycleCx, event: &LifeCycle) {
+        self.element.lifecycle(cx, event);
     }
 }
 
@@ -294,8 +342,8 @@ impl<E: Widget + StyleableWidget> Widget for StyleOnHover<E> {
         self.element.paint(cx);
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, prev: NodeId) -> NodeId {
-        self.element.layout(cx, prev)
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> Size {
+        self.element.layout(cx, bc)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
@@ -307,6 +355,10 @@ impl<E: Widget + StyleableWidget> Widget for StyleOnHover<E> {
             cx.request_paint();
             self.is_hovering = false;
         }
+    }
+
+    fn lifecycle(&mut self, cx: &mut super::core::LifeCycleCx, event: &LifeCycle) {
+        self.element.lifecycle(cx, event);
     }
 }
 
@@ -340,11 +392,11 @@ impl<E: Widget> Widget for StyleOnPressed<E> {
         if cx.is_active() {
             cx.override_style = self.style.patch(cx.override_style);
         };
-        self.element.paint(cx, cx.rect());
+        self.element.paint(cx);
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, _prev: NodeId) -> NodeId {
-        self.element.layout(cx)
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> Size {
+        self.element.layout(cx, bc)
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
@@ -368,6 +420,10 @@ impl<E: Widget> Widget for StyleOnPressed<E> {
             }
             _ => (),
         }
+    }
+
+    fn lifecycle(&mut self, cx: &mut super::core::LifeCycleCx, event: &LifeCycle) {
+        self.element.lifecycle(cx, event);
     }
 }
 

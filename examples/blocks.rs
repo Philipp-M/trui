@@ -4,12 +4,11 @@ use anyhow::Result;
 use ratatui::style::{Color, Style};
 use trui::*;
 
-// TODO layouting is not really optimal yet (needs to be configurable, a good abstraction on top of taffy likely)
 fn main() -> Result<()> {
     let view = Arc::new(
         block(h_stack((
             v_stack((
-                block(("With".fg(Color::Yellow), " background").wrapped()).bg(Color::LightYellow),
+                // block(("With".fg(Color::Yellow), " background").wrapped()).bg(Color::LightYellow),
                 block("text inside block").with_borders(BorderKind::Straight),
             )),
             v_stack((
