@@ -1,7 +1,7 @@
 use bitflags::bitflags;
 use std::marker::PhantomData;
 
-use crate::geometry::Point;
+use crate::geometry::{Point, Size};
 use crossterm::event::{MouseButton, MouseEventKind};
 use ratatui::style::Style;
 
@@ -99,7 +99,7 @@ impl<E: Widget> Widget for OnMouse<E> {
         self.element.paint(cx);
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> kurbo::Size {
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> Size {
         self.element.layout(cx, bc)
     }
 
@@ -190,7 +190,7 @@ impl<E: Widget> Widget for OnClick<E> {
         self.element.paint(cx);
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> kurbo::Size {
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> Size {
         self.element.layout(cx, bc)
     }
 
@@ -253,7 +253,7 @@ impl<E: Widget> Widget for OnHover<E> {
         self.element.paint(cx);
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> kurbo::Size {
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> Size {
         self.element.layout(cx, bc)
     }
 
@@ -296,7 +296,7 @@ impl<E: Widget> Widget for OnHoverLost<E> {
         self.element.paint(cx);
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> kurbo::Size {
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> Size {
         self.element.layout(cx, bc)
     }
 
@@ -342,7 +342,7 @@ impl<E: Widget + StyleableWidget> Widget for StyleOnHover<E> {
         self.element.paint(cx);
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> kurbo::Size {
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> Size {
         self.element.layout(cx, bc)
     }
 
@@ -395,7 +395,7 @@ impl<E: Widget> Widget for StyleOnPressed<E> {
         self.element.paint(cx);
     }
 
-    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> kurbo::Size {
+    fn layout(&mut self, cx: &mut LayoutCx, bc: &super::BoxConstraints) -> Size {
         self.element.layout(cx, bc)
     }
 

@@ -1,7 +1,3 @@
-// use ratatui::{layout::Rect, prelude::layout::Size};
-
-// use crate::Point;
-
 use crate::geometry::{Axis, Size};
 
 use super::{

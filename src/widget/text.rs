@@ -5,7 +5,9 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::geometry::{to_ratatui_rect, Size};
 
-use super::{core::EventCx, ChangeFlags, Event, LayoutCx, PaintCx, StyleableWidget, Widget};
+use super::{
+    core::EventCx, BoxConstraints, ChangeFlags, Event, LayoutCx, PaintCx, StyleableWidget, Widget,
+};
 
 pub struct Text {
     pub(crate) text: Cow<'static, str>,
@@ -46,14 +48,15 @@ impl Widget for Text {
 
         let max_width = rect.width.min(term_size.width.saturating_sub(rect.x)) as usize;
         if rect.height > 0 && max_width > 0 && rect.y < term_size.height {
+            // TODO cut the text off, when it is out of bounds (rect.height is not respected)
+            // likely with a custom implementation to render the text, instead of `set_stringn`
             cx.terminal
                 .current_buffer_mut()
                 .set_stringn(rect.x, rect.y, &self.text, max_width, style);
         }
     }
 
-    fn layout(&mut self, _cx: &mut LayoutCx, _bc: &super::BoxConstraints) -> Size {
-        // TODO this currently violates the box constraints, this should in some way wrap, or cut off the text
+    fn layout(&mut self, _cx: &mut LayoutCx, bc: &BoxConstraints) -> Size {
         let mut width = 0;
         let mut height = 0;
 
@@ -62,10 +65,10 @@ impl Widget for Text {
             height += 1;
         }
 
-        Size {
+        bc.constrain(Size {
             width: width as f64,
             height: height as f64,
-        }
+        })
     }
 
     fn event(&mut self, _cx: &mut EventCx, _event: &Event) {}
@@ -123,7 +126,7 @@ impl Widget for WrappedText {
         todo!()
     }
 
-    fn layout(&mut self, _cx: &mut LayoutCx, _bc: &super::BoxConstraints) -> Size {
+    fn layout(&mut self, _cx: &mut LayoutCx, _bc: &BoxConstraints) -> Size {
         todo!()
     }
 
