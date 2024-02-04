@@ -9,15 +9,23 @@ fn main() -> Result<()> {
         block(weighted_h_stack((
             v_stack((
                 // block(("With".fg(Color::Yellow), " background").wrapped()).bg(Color::LightYellow),
-                block("text inside block").with_borders(BorderKind::Straight),
+                block("text inside block")
+                    .with_borders(BorderKind::Straight)
+                    .margin((Position::VERTICAL, 2)),
             ))
             .weight(1.5),
             v_stack((
                 block("Styled title".bg(Color::Red).fg(Color::White)).bg(Color::LightCyan),
-                block(v_stack((
-                    "With styled borders and doubled borders",
-                    block("Block inside block").with_borders(BorderKind::Straight),
-                )))
+                block(
+                    v_stack((
+                        "With styled borders and doubled borders",
+                        block("Block inside block")
+                            .with_borders(BorderKind::Straight)
+                            .margin(2),
+                    ))
+                    .margin((Position::TOP, 1))
+                    .margin((Position::HORIZONTAL, 2)),
+                )
                 .with_borders((
                     Borders::VERTICAL,
                     Style::default().fg(Color::Cyan),

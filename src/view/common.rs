@@ -20,12 +20,26 @@ bitflags! {
         const BOTTOM     = 0b0100;
         /// Show the left border
         const LEFT       = 0b1000;
-        /// Show all borders
-        const ALL        = Self::TOP.bits() | Self::RIGHT.bits() | Self::BOTTOM.bits() | Self::LEFT.bits();
         /// Show top and bottom borders
         const HORIZONTAL = Self::BOTTOM.bits() | Self::TOP.bits();
         /// Show left and right borders
         const VERTICAL   = Self::LEFT.bits() | Self::RIGHT.bits();
+        /// Show all borders
+        const ALL        = Self::HORIZONTAL.bits() | Self::VERTICAL.bits();
+    }
+}
+
+bitflags! {
+    /// Bitflags that can be composed to set the visible borders essentially on the block widget.
+    #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub struct Position: u8 {
+        const TOP        = 0b0001;
+        const RIGHT      = 0b0010;
+        const BOTTOM     = 0b0100;
+        const LEFT       = 0b1000;
+        const HORIZONTAL = Self::LEFT.bits() | Self::RIGHT.bits();
+        const VERTICAL   = Self::TOP.bits() | Self::BOTTOM.bits();
+        const ALL        = Self::HORIZONTAL.bits() | Self::VERTICAL.bits();
     }
 }
 

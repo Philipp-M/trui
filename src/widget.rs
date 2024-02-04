@@ -3,6 +3,7 @@ mod box_constraints;
 mod core;
 mod events;
 mod linear_layout;
+mod margin;
 mod text;
 mod weighted_linear_layout;
 
@@ -15,5 +16,6 @@ pub(crate) use block::Block;
 pub use box_constraints::BoxConstraints;
 pub use events::*;
 pub(crate) use linear_layout::LinearLayout;
+pub(crate) use margin::Margin;
 pub(crate) use text::*;
 pub(crate) use weighted_linear_layout::{WeightedLayoutElement, WeightedLinearLayout};
