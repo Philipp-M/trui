@@ -1,6 +1,5 @@
 use super::{
-    core::LayoutCx, core::PaintCx, BoxConstraints, ChangeFlags, Event, EventCx, Pod,
-    StyleableWidget, Widget,
+    core::LayoutCx, core::PaintCx, BoxConstraints, ChangeFlags, Event, EventCx, Pod, Widget,
 };
 use crate::{
     geometry::{to_ratatui_rect, Point, Size},
@@ -151,10 +150,7 @@ impl Block {
             ChangeFlags::empty()
         }
     }
-}
-
-impl StyleableWidget for Block {
-    fn set_style(&mut self, style: Style) -> ChangeFlags {
+    pub(crate) fn set_style(&mut self, style: Style) -> ChangeFlags {
         if style != self.style {
             self.style = style;
             ChangeFlags::PAINT

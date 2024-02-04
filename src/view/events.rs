@@ -1,5 +1,5 @@
 use super::{Cx, PendingTask, Styleable, View, ViewMarker};
-use crate::widget::{self, CatchMouseButton, ChangeFlags, StyleableWidget};
+use crate::widget::{self, CatchMouseButton, ChangeFlags};
 use futures_task::Waker;
 use futures_util::{Future, Stream, StreamExt};
 use ratatui::style::Style;
@@ -513,7 +513,6 @@ macro_rules! styled_event_views {
 impl<T, A, VS, V> View<T, A> for StyleOnHover<V>
 where
     VS: View<T, A>,
-    V::Element: StyleableWidget,
     V: View<T, A> + Styleable<Output = VS>,
 {
     type State = V::State;
@@ -559,7 +558,6 @@ where
 impl<T, A, VS, V> View<T, A> for StyleOnPressed<V>
 where
     VS: View<T, A>,
-    V::Element: StyleableWidget,
     V: View<T, A> + Styleable<Output = VS>,
 {
     type State = (V::State, Id);

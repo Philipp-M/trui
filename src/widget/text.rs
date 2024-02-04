@@ -5,9 +5,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::geometry::{to_ratatui_rect, Size};
 
-use super::{
-    core::EventCx, BoxConstraints, ChangeFlags, Event, LayoutCx, PaintCx, StyleableWidget, Widget,
-};
+use super::{core::EventCx, BoxConstraints, ChangeFlags, Event, LayoutCx, PaintCx, Widget};
 
 pub struct Text {
     pub(crate) text: Cow<'static, str>,
@@ -25,10 +23,7 @@ impl Text {
         }
         changeflags
     }
-}
-
-impl StyleableWidget for Text {
-    fn set_style(&mut self, style: Style) -> ChangeFlags {
+    pub(crate) fn set_style(&mut self, style: Style) -> ChangeFlags {
         if style != self.style {
             self.style = style;
             ChangeFlags::PAINT

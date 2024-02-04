@@ -316,6 +316,11 @@ impl Pod {
     }
 
     /// Returns the wrapped widget.
+    pub fn downcast_ref<T: 'static>(&self) -> Option<&T> {
+        (*self.widget).as_any().downcast_ref()
+    }
+
+    /// Returns the wrapped widget.
     pub fn downcast_mut<T: 'static>(&mut self) -> Option<&mut T> {
         (*self.widget).as_any_mut().downcast_mut()
     }
@@ -628,9 +633,4 @@ impl Widget for Box<dyn AnyWidget> {
     fn lifecycle(&mut self, cx: &mut LifeCycleCx, event: &LifeCycle) {
         self.deref_mut().lifecycle(cx, event)
     }
-}
-
-// TODO does that trait really make sense?
-pub trait StyleableWidget: Widget {
-    fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags;
 }

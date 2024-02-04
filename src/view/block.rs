@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::widget::{self, ChangeFlags, StyleableWidget};
+use crate::widget::{self, ChangeFlags};
 
 use super::{BorderKind, BorderStyle, BorderStyles, Borders, Cx, Styleable, View, ViewMarker};
 use ratatui::style::{Color, Style};

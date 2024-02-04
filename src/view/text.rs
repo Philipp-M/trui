@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use super::{common::Styleable, Cx, View, ViewMarker};
-use crate::widget::{self, ChangeFlags, StyleableWidget};
+use crate::widget::{self, ChangeFlags};
 use ratatui::style::{Color, Modifier, Style};
 use unicode_segmentation::UnicodeSegmentation;
 

@@ -6,7 +6,7 @@ use crossterm::event::{MouseButton, MouseEventKind};
 use ratatui::style::Style;
 
 use super::{
-    core::{IdPath, PaintCx, StyleableWidget},
+    core::{IdPath, PaintCx},
     ChangeFlags, Event, EventCx, LayoutCx, Message, Pod, Widget,
 };
 
@@ -160,15 +160,6 @@ impl<E: Widget> Widget for OnMouse<E> {
     }
 }
 
-impl<E: Widget + StyleableWidget> StyleableWidget for OnMouse<E> {
-    fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags {
-        self.element
-            .downcast_mut::<E>()
-            .map(|e| e.set_style(style))
-            .unwrap_or(ChangeFlags::all())
-    }
-}
-
 pub struct OnClick<E> {
     pub(crate) element: Pod,
     id_path: IdPath,
@@ -220,15 +211,6 @@ impl<E: Widget> Widget for OnClick<E> {
 
     fn lifecycle(&mut self, cx: &mut super::core::LifeCycleCx, event: &LifeCycle) {
         self.element.lifecycle(cx, event);
-    }
-}
-
-impl<E: Widget + StyleableWidget> StyleableWidget for OnClick<E> {
-    fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags {
-        self.element
-            .downcast_mut::<E>()
-            .map(|e| e.set_style(style))
-            .unwrap_or(ChangeFlags::all())
     }
 }
 
@@ -334,7 +316,7 @@ impl<E> StyleOnHover<E> {
     }
 }
 
-impl<E: Widget + StyleableWidget> Widget for StyleOnHover<E> {
+impl<E: Widget> Widget for StyleOnHover<E> {
     fn paint(&mut self, cx: &mut PaintCx) {
         if cx.is_hot() {
             cx.override_style = self.style.patch(cx.override_style);
@@ -378,15 +360,6 @@ impl<E: Widget> StyleOnPressed<E> {
     }
 }
 
-impl<E: Widget + StyleableWidget> StyleableWidget for StyleOnPressed<E> {
-    fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags {
-        self.element
-            .downcast_mut::<E>()
-            .map(|e| e.set_style(style))
-            .unwrap_or(ChangeFlags::all())
-    }
-}
-
 impl<E: Widget> Widget for StyleOnPressed<E> {
     fn paint(&mut self, cx: &mut PaintCx) {
         if cx.is_active() {
@@ -426,17 +399,3 @@ impl<E: Widget> Widget for StyleOnPressed<E> {
         self.element.lifecycle(cx, event);
     }
 }
-
-macro_rules! styleable_widget_events {
-    ($($name:ident),*) => {
-    $(
-    impl<E: Widget + StyleableWidget> StyleableWidget for $name<E> {
-        fn set_style(&mut self, style: ratatui::style::Style) -> ChangeFlags {
-            self.element.set_style(style)
-        }
-    }
-    )*
-    };
-}
-
-styleable_widget_events!(OnHover, OnHoverLost, StyleOnHover);

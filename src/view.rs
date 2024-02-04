@@ -10,8 +10,7 @@ mod use_state;
 use ratatui::style::{Color, Style};
 pub use xilem_core::{Id, IdPath, VecSplice};
 
-use crate::widget::StyleableWidget;
-
+// TODO do this via a prelude instead (and possibly not wildcard export)
 pub use self::core::*;
 pub use block::*;
 pub use common::*;
@@ -75,7 +74,6 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
     fn on_hover_style<VS>(self, style: Style) -> StyleOnHover<Self>
     where
         VS: View<T, A>,
-        Self::Element: StyleableWidget,
         Self: Styleable<Output = VS>,
     {
         StyleOnHover { view: self, style }
@@ -84,7 +82,6 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
     fn on_hover_fg<VS>(self, color: Color) -> StyleOnHover<Self>
     where
         VS: View<T, A>,
-        Self::Element: StyleableWidget,
         Self: Styleable<Output = VS>,
     {
         self.on_hover_style(Style::default().fg(color))
@@ -93,7 +90,6 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
     fn on_hover_bg<VS>(self, color: Color) -> StyleOnHover<Self>
     where
         VS: View<T, A>,
-        Self::Element: StyleableWidget,
         Self: Styleable<Output = VS>,
     {
         self.on_hover_style(Style::default().bg(color))
@@ -102,7 +98,6 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
     fn on_pressed_style<VS>(self, style: Style) -> StyleOnPressed<Self>
     where
         VS: View<T, A>,
-        Self::Element: StyleableWidget,
         Self: Styleable<Output = VS>,
     {
         StyleOnPressed { view: self, style }
@@ -111,7 +106,6 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
     fn on_pressed_fg<VS>(self, color: Color) -> StyleOnPressed<Self>
     where
         VS: View<T, A>,
-        Self::Element: StyleableWidget,
         Self: Styleable<Output = VS>,
     {
         self.on_pressed_style(Style::default().fg(color))
@@ -120,7 +114,6 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
     fn on_pressed_bg<VS>(self, color: Color) -> StyleOnPressed<Self>
     where
         VS: View<T, A>,
-        Self::Element: StyleableWidget,
         Self: Styleable<Output = VS>,
     {
         self.on_pressed_style(Style::default().bg(color))

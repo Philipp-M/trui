@@ -7,7 +7,7 @@ mod text;
 
 pub use self::core::{
     AnyWidget, ChangeFlags, CxState, Event, EventCx, LayoutCx, LifeCycleCx, Message, PaintCx, Pod,
-    StyleableWidget, Widget,
+    Widget,
 };
 pub(crate) use self::core::{PodFlags, WidgetState};
 pub(crate) use block::Block;
