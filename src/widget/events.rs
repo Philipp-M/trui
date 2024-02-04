@@ -7,7 +7,7 @@ use ratatui::style::Style;
 
 use super::{
     core::{IdPath, PaintCx},
-    ChangeFlags, Event, EventCx, LayoutCx, Message, Pod, Widget,
+    Event, EventCx, LayoutCx, Message, Pod, Widget,
 };
 
 #[derive(Debug)]

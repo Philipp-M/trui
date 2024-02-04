@@ -4,6 +4,7 @@ mod core;
 mod defer;
 mod events;
 mod linear_layout;
+mod margin;
 mod text;
 mod use_state;
 mod weighted_linear_layout;
@@ -20,6 +21,7 @@ pub use common::*;
 pub use defer::*;
 pub use events::*;
 pub use linear_layout::*;
+pub use margin::*;
 pub use text::*;
 pub use use_state::*;
 pub use weighted_linear_layout::*;
@@ -41,6 +43,16 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         F: Fn(&mut ParentT) -> &mut T + Send + Sync + Send,
     {
         AdaptState::new(f, self)
+    }
+
+    fn margin<S: Into<MarginStyle>>(self, style: S) -> Margin<Self, T, A> {
+        let style = style.into();
+        Margin {
+            content: self,
+            position: style.position,
+            amount: style.amount,
+            phantom: PhantomData,
+        }
     }
 
     fn on_click<EH: EventHandler<T, A>>(self, event_handler: EH) -> OnClick<Self, EH> {
