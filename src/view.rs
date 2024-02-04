@@ -6,6 +6,9 @@ mod events;
 mod linear_layout;
 mod text;
 mod use_state;
+mod weighted_linear_layout;
+
+use std::marker::PhantomData;
 
 use ratatui::style::{Color, Style};
 pub use xilem_core::{Id, IdPath, VecSplice};
@@ -19,6 +22,7 @@ pub use events::*;
 pub use linear_layout::*;
 pub use text::*;
 pub use use_state::*;
+pub use weighted_linear_layout::*;
 
 // TODO this could maybe also be added directly to `View` (possibly copying the macro expanded version of it
 /// A trait that makes it possible to use core views such as [`Adapt`] in the continuation/builder style.
@@ -43,6 +47,14 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         OnClick {
             view: self,
             event_handler,
+        }
+    }
+
+    fn weight(self, weight: f64) -> WeightedLayoutElement<Self, T, A> {
+        WeightedLayoutElement {
+            content: self,
+            weight,
+            phantom: PhantomData,
         }
     }
 
