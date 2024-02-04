@@ -6,11 +6,12 @@ use trui::*;
 
 fn main() -> Result<()> {
     let view = Arc::new(
-        block(h_stack((
+        block(weighted_h_stack((
             v_stack((
                 // block(("With".fg(Color::Yellow), " background").wrapped()).bg(Color::LightYellow),
                 block("text inside block").with_borders(BorderKind::Straight),
-            )),
+            ))
+            .weight(1.5),
             v_stack((
                 block("Styled title".bg(Color::Red).fg(Color::White)).bg(Color::LightCyan),
                 block(v_stack((
