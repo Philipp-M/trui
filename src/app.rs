@@ -20,13 +20,7 @@ use crossterm::{
     },
 };
 use ratatui::Terminal;
-use std::{
-    collections::HashSet,
-    io::stdout,
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashSet, io::stdout, path::PathBuf, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
 use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
@@ -54,11 +48,14 @@ fn setup_logging(log_level: tracing::Level) -> Result<tracing_appender::non_bloc
     Ok(guard)
 }
 
-pub struct App<T, V: View<T>> {
+pub struct App<T: Send + 'static, V: View<T> + 'static> {
     req_chan: tokio::sync::mpsc::Sender<AppMessage>,
     render_response_chan: tokio::sync::mpsc::Receiver<RenderResponse<V, V::State>>,
     return_chan: tokio::sync::mpsc::Sender<(V, V::State, HashSet<Id>)>,
     event_chan: tokio::sync::mpsc::Receiver<Event>,
+
+    #[cfg(test)]
+    event_tx: tokio::sync::mpsc::Sender<Event>,
 
     #[cfg(test)]
     terminal: Terminal<TestBackend>,
@@ -195,13 +192,14 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         // Send this event here, so that the app renders directly when it is run.
         let _ = event_tx.blocking_send(Event::Start);
 
+        let event_tx_clone = event_tx.clone();
         // spawn app task
         rt.spawn(async move {
             let mut app_task = AppTask {
                 req_chan: message_rx,
                 response_chan: response_tx,
                 return_chan: return_rx,
-                event_chan: event_tx,
+                event_chan: event_tx_clone,
                 data,
                 app_logic,
                 view: None,
@@ -219,6 +217,10 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             render_response_chan: response_rx,
             return_chan: return_tx,
             event_chan: event_rx,
+
+            #[cfg(test)]
+            event_tx: event_tx.clone(),
+
             terminal,
             size: Size::default(),
             cursor_pos: None,
@@ -402,6 +404,10 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         }
         drop(main_loop_tracing_span);
 
+        Ok(())
+    }
+
+    fn cleanup(&self) -> Result<()> {
         execute!(
             stdout(),
             cursor::Show,
@@ -411,6 +417,24 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         )?;
         disable_raw_mode()?;
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub fn get_event_tx(&self) -> tokio::sync::mpsc::Sender<Event> {
+        self.event_tx.clone()
+    }
+
+    #[cfg(test)]
+    pub fn get_terminal(&mut self) -> &mut Terminal<TestBackend> {
+        &mut self.terminal
+    }
+}
+
+/// Restore the terminal no matter how the app exits
+impl<T: Send + 'static, V: View<T> + 'static> Drop for App<T, V> {
+    fn drop(&mut self) {
+        self.cleanup()
+            .unwrap_or_else(|e| eprint!("Restoring the terminal failed: {e}"));
     }
 }
 

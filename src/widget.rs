@@ -1,6 +1,12 @@
 mod block;
 mod box_constraints;
+
+#[cfg(not(test))]
 mod core;
+
+#[cfg(test)]
+pub(crate) mod core;
+
 mod events;
 mod fill_max_size;
 mod linear_layout;

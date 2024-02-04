@@ -303,3 +303,30 @@ impl From<(Style, BorderKind, Borders)> for BorderStyle {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use ratatui::layout::Size;
+
+    use crate::test_helper::render_view;
+    use crate::AnyView;
+
+    use super::*;
+
+    struct AppState;
+
+    #[test]
+    fn simple_block_test() {
+        let sut = Box::new(|| Box::new(block("some text")) as Box<dyn AnyView<_>>);
+        let buffer = render_view(
+            Size {
+                width: 15,
+                height: 5,
+            },
+            sut,
+            AppState,
+        );
+
+        insta::assert_debug_snapshot!(buffer);
+    }
+}

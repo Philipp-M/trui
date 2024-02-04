@@ -25,3 +25,6 @@ unicode-width = "0.1.11"
 futures = "0.3"
 insta = "1.34.0"
 rand = "0.8.5"
+
+[lints.clippy]
+dbg_macro = "warn"
