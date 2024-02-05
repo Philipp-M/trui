@@ -202,7 +202,7 @@ impl Widget for Block {
         let content_size = self.content.layout(cx, &bc.shrink(border_padding));
 
         self.content.set_origin(cx, Point::new(pad_left, pad_top));
-        content_size + border_padding
+        bc.constrain(content_size + border_padding)
     }
 
     fn lifecycle(&mut self, cx: &mut super::core::LifeCycleCx, event: &super::LifeCycle) {

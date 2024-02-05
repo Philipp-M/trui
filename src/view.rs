@@ -3,6 +3,7 @@ mod common;
 mod core;
 mod defer;
 mod events;
+mod fill_max_size;
 mod linear_layout;
 mod margin;
 mod text;
@@ -20,6 +21,7 @@ pub use block::*;
 pub use common::*;
 pub use defer::*;
 pub use events::*;
+pub use fill_max_size::*;
 pub use linear_layout::*;
 pub use margin::*;
 pub use text::*;
@@ -51,6 +53,34 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
             content: self,
             position: style.position,
             amount: style.amount,
+            phantom: PhantomData,
+        }
+    }
+
+    fn fill_max_size<S: Into<FillMaxSizeStyle>>(self, style: S) -> FillMaxSize<Self, T, A> {
+        let style = style.into();
+        FillMaxSize {
+            content: self,
+            fill: style.fill,
+            percent: style.percent,
+            phantom: PhantomData,
+        }
+    }
+
+    fn fill_max_width(self, percent: f64) -> FillMaxSize<Self, T, A> {
+        FillMaxSize {
+            content: self,
+            fill: Fill::WIDTH,
+            percent,
+            phantom: PhantomData,
+        }
+    }
+
+    fn fill_max_height(self, percent: f64) -> FillMaxSize<Self, T, A> {
+        FillMaxSize {
+            content: self,
+            fill: Fill::HEIGHT,
+            percent,
             phantom: PhantomData,
         }
     }

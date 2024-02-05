@@ -238,6 +238,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             width: width as f64,
             height: height as f64,
         };
+        tracing::error!("current size: {term_size}");
 
         let needs_layout_recomputation = root_pod
             .state

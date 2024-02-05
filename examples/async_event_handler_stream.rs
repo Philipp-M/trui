@@ -80,7 +80,7 @@ fn main() -> Result<()> {
                         *app_state += &message;
                     },
                 )),
-            block(app_state.clone().wrapped())
+            block(app_state.clone()) //.wrapped()
                 .with_borders(())
                 .fg(if app_state.is_empty() {
                     Color::White

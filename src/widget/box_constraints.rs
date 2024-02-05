@@ -80,6 +80,31 @@ impl BoxConstraints {
         }
     }
 
+    pub fn constrain_to(&self, axis: Axis, dim: f64) -> BoxConstraints {
+        match axis {
+            Axis::Horizontal => self.constrain_width_to(dim),
+            Axis::Vertical => self.constrain_height_to(dim),
+        }
+    }
+
+    /// Constrain the width to dim (clamps to the current to fit within the constraint)
+    pub fn constrain_width_to(&self, dim: f64) -> Self {
+        let dim = dim.clamp(self.min.width, self.max.width);
+        BoxConstraints::new(
+            Size::new(dim, self.min.height),
+            Size::new(dim, self.max.height),
+        )
+    }
+
+    /// Constrain the height to dim (clamps to the current to fit within the constraint)
+    pub fn constrain_height_to(&self, dim: f64) -> Self {
+        let dim = dim.clamp(self.min.height, self.max.height);
+        BoxConstraints::new(
+            Size::new(self.min.width, dim),
+            Size::new(self.max.width, dim),
+        )
+    }
+
     /// Create a "loose" version of the constraints.
     ///
     /// Make a version with zero minimum size, but the same maximum size.
