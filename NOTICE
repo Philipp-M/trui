@@ -1,0 +1,2 @@
+This code is heavily based on Xilem (as of https://github.com/linebender/xilem/commit/d800c22399ca3e0d28dfe5a92ac9fffa92961dc4).
+This currently especially applies to `src/app.rs` and a few helper files such `src/geometry.rs` and `src/widget/box_constraint.rs` with a few modifications
