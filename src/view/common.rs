@@ -43,6 +43,16 @@ bitflags! {
     }
 }
 
+bitflags! {
+    /// Bitflags that can be composed to set the visible borders essentially on the block widget.
+    #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub struct Fill: u8 {
+        const WIDTH      = 0b0001;
+        const HEIGHT     = 0b0010;
+        const ALL        = Self::WIDTH.bits() | Self::HEIGHT.bits();
+    }
+}
+
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BorderStyle {
     pub add_borders: Borders,

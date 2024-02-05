@@ -84,25 +84,27 @@ impl Widget for WeightedLinearLayout {
     fn layout(&mut self, cx: &mut LayoutCx, bc: &BoxConstraints) -> Size {
         let mut major_used: f64 = 0.0;
         let mut max_minor: f64 = 0.0;
+        let major_max = self.axis.major(*bc).end;
 
         let total_weight_inv = 1.0 / get_weights(&self.children, &mut self.weights);
         let space_available = self.axis.major(*bc).end;
 
         for (index, child) in self.children.iter_mut().enumerate() {
             let constraint = if space_available != f64::INFINITY {
-                let size = space_available * (self.weights[index] * total_weight_inv);
-                size..size
+                let size = (space_available * (self.weights[index] * total_weight_inv))
+                    .min(major_max - major_used);
+                size..size // TODO loosen the minimum size (to 0)?
             } else {
                 0.0..f64::INFINITY
             };
-            let child_bc = self.axis.with_major(*bc, constraint);
+            let child_bc = self.axis.with_major(bc.loosen(), constraint);
             let size = child.layout(cx, &child_bc);
             child.set_origin(cx, self.axis.pack(major_used, 0.0));
             major_used += self.axis.major(size);
             max_minor = max_minor.max(self.axis.minor(size));
         }
 
-        self.axis.pack(major_used, max_minor)
+        bc.constrain(self.axis.pack::<Size>(major_used, max_minor))
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &super::Event) {

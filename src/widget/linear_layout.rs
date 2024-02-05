@@ -29,7 +29,8 @@ impl Widget for LinearLayout {
     }
 
     fn layout(&mut self, cx: &mut LayoutCx, bc: &BoxConstraints) -> Size {
-        let child_bc = self.axis.with_major(*bc, 0.0..f64::INFINITY);
+        let major_max = self.axis.major(*bc).end;
+        let mut child_bc = self.axis.with_major(bc.loosen(), 0.0..major_max);
         let child_count = self.children.len();
 
         let mut major_used: f64 = 0.0;
@@ -42,10 +43,11 @@ impl Widget for LinearLayout {
             if index < child_count - 1 {
                 major_used += self.spacing;
             }
+            child_bc = child_bc.shrink_max_to(self.axis, major_max - major_used);
             max_minor = max_minor.max(self.axis.minor(size));
         }
 
-        self.axis.pack(major_used, max_minor)
+        bc.constrain(self.axis.pack::<Size>(major_used, max_minor))
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &super::Event) {
