@@ -115,35 +115,34 @@ pub fn debug_view<V, T, A>(content: V, debug_chan_tx: mpsc::Sender<Buffer>) -> D
 impl<T, A, V> ViewMarker for DebugView<V, T, A> {}
 
 impl<T, A, V: View<T, A>> View<T, A> for DebugView<V, T, A> {
-    type State = (V::State, xilem_core::Id);
+    type State = V::State;
 
     type Element = DebugWidget;
 
     fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, state, element) = self.content.build(cx);
-        (id, state, DebugWidget::new(element, self.debug_chan_tx.clone()))
+        (
+            id,
+            state,
+            DebugWidget::new(element, self.debug_chan_tx.clone()),
+        )
     }
 
     fn rebuild(
         &self,
-        cx: &mut Cx,
-        prev: &Self,
-        id: &mut xilem_core::Id,
-        (state, child_id): &mut Self::State,
-        element: &mut Self::Element,
+        _cx: &mut Cx,
+        _prev: &Self,
+        _id: &mut xilem_core::Id,
+        _state: &mut Self::State,
+        _element: &mut Self::Element,
     ) -> crate::widget::ChangeFlags {
-        let element = element
-            .content
-            .downcast_mut()
-            .expect("The DebugView content widget changed its type, this should never happen!");
-
         ChangeFlags::empty()
     }
 
     fn message(
         &self,
         id_path: &[xilem_core::Id],
-        (state, child_id): &mut Self::State,
+        state: &mut Self::State,
         message: Box<dyn std::any::Any>,
         app_state: &mut T,
     ) -> MessageResult<A> {
