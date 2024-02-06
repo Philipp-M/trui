@@ -130,13 +130,17 @@ impl<T, A, V: View<T, A>> View<T, A> for DebugView<V, T, A> {
 
     fn rebuild(
         &self,
-        _cx: &mut Cx,
-        _prev: &Self,
-        _id: &mut xilem_core::Id,
-        _state: &mut Self::State,
-        _element: &mut Self::Element,
-    ) -> crate::widget::ChangeFlags {
-        ChangeFlags::empty()
+        cx: &mut Cx,
+        prev: &Self,
+        id: &mut xilem_core::Id,
+        state: &mut Self::State,
+        element: &mut Self::Element,
+    ) -> ChangeFlags {
+        let element = element
+            .content
+            .downcast_mut()
+            .expect("The DebugView content widget changed its type, this should never happen!");
+        self.content.rebuild(cx, &prev.content, id, state, element)
     }
 
     fn message(
