@@ -306,10 +306,11 @@ impl From<(Style, BorderKind, Borders)> for BorderStyle {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use ratatui::layout::Size;
 
     use crate::test_helper::render_view;
-    use crate::AnyView;
 
     use super::*;
 
@@ -317,7 +318,7 @@ mod tests {
 
     #[test]
     fn simple_block_test() {
-        let sut = Box::new(|| Box::new(block("some text")) as Box<dyn AnyView<_>>);
+        let sut = Arc::new(block("some text"));
         let buffer = render_view(
             Size {
                 width: 15,

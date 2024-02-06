@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use ratatui::backend::TestBackend;
 use ratatui::layout::Size;
@@ -10,7 +11,7 @@ use xilem_core::MessageResult;
 
 use crate::widget::{BoxConstraints, ChangeFlags, Event};
 use crate::widget::{CxState, LayoutCx, PaintCx, Pod, Widget, WidgetState};
-use crate::{AnyView, App, Cx, View, ViewMarker};
+use crate::{App, Cx, View, ViewMarker};
 
 /// Render a view and return the terminal to check the generated output
 ///
@@ -20,7 +21,7 @@ use crate::{AnyView, App, Cx, View, ViewMarker};
 /// * `state` - Is the state for the [`App`]
 pub fn render_view<T: Send + 'static>(
     buffer_size: Size,
-    sut: Box<dyn Fn() -> Box<dyn AnyView<T>> + Send + Sync>,
+    sut: Arc<impl View<T> + 'static>,
     state: T,
 ) -> Buffer {
     const CHANNEL_SIZE: usize = 3;
@@ -31,8 +32,7 @@ pub fn render_view<T: Send + 'static>(
 
     let join_handle = std::thread::spawn(move || {
         let mut app = App::new(state, move |_state| {
-            let w = sut();
-            debug_view(w, message_tx.clone())
+            debug_view(sut.clone(), message_tx.clone())
         });
         event_tx_clone.blocking_send(app.get_event_tx()).unwrap();
 
@@ -114,11 +114,7 @@ pub fn debug_view<V, T, A>(content: V, debug_chan_tx: mpsc::Sender<Buffer>) -> D
 
 impl<T, A, V> ViewMarker for DebugView<V, T, A> {}
 
-impl<T, A, V> View<T, A> for DebugView<V, T, A>
-where
-    V: View<T, A>,
-    V::Element: 'static,
-{
+impl<T, A, V: View<T, A>> View<T, A> for DebugView<V, T, A> {
     type State = (V::State, xilem_core::Id);
 
     type Element = DebugWidget;
@@ -136,18 +132,12 @@ where
         (state, child_id): &mut Self::State,
         element: &mut Self::Element,
     ) -> crate::widget::ChangeFlags {
-        let changeflags = ChangeFlags::empty();
-
         let element = element
             .content
             .downcast_mut()
             .expect("The DebugView content widget changed its type, this should never happen!");
 
-        changeflags
-            | cx.with_id(*id, |cx| {
-                self.content
-                    .rebuild(cx, &prev.content, child_id, state, element)
-            })
+        ChangeFlags::empty()
     }
 
     fn message(

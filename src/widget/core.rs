@@ -37,7 +37,6 @@ pub enum Event {
 }
 
 /// Static state that is shared between most contexts.
-#[derive(Debug)]
 pub struct CxState<'a> {
     messages: &'a mut Vec<Message>,
 }
