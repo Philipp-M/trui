@@ -17,6 +17,9 @@ name: CI
 on:
   pull_request:
   merge_group:
+  push:
+    branches:
+      - 'main'
 
 jobs:
   rustfmt:
