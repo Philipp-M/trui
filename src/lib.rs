@@ -8,3 +8,6 @@ pub use app::App;
 pub use ratatui::style::{Color, Modifier, Style};
 pub use view::*;
 pub use widget::CatchMouseButton;
+
+#[cfg(test)]
+mod test_helper;

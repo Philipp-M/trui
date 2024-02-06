@@ -73,7 +73,7 @@ impl BorderStyles {
         enabled_borders.contains(borders)
     }
 
-    /// if all of the borders are set in one style "frame" (i.e. with widget.with_borders(<borders>)), it returns the defined border kind
+    /// If all of the borders are set in one style "frame" (i.e. with widget.with_borders(\<borders\>)), it returns the defined border kind
     pub fn border_kind(&self, borders: Borders) -> BorderKind {
         self.0.iter().fold(BorderKind::default(), |kind, style| {
             if style.add_borders.contains(borders) {

@@ -3,9 +3,18 @@ use crate::geometry::{Point, Rect, Size};
 use bitflags::bitflags;
 pub use crossterm::event::MouseEvent;
 use crossterm::event::{KeyEvent, MouseEventKind};
-use ratatui::{backend::CrosstermBackend, Terminal};
-use std::{any::Any, io::Stdout, ops::DerefMut};
+use ratatui::Terminal;
+use std::{any::Any, ops::DerefMut};
 use xilem_core::{message, Id};
+
+#[cfg(test)]
+use ratatui::backend::TestBackend;
+
+#[cfg(not(test))]
+use ratatui::backend::CrosstermBackend;
+
+#[cfg(not(test))]
+use std::io::Stdout;
 
 message!(Send);
 
@@ -64,6 +73,11 @@ pub struct PaintCx<'a, 'b> {
     pub(crate) cx_state: &'a mut CxState<'b>,
     // TODO mutable? (xilem doesn't do this, but I think there are use cases for this...)
     pub(crate) widget_state: &'a mut WidgetState,
+
+    #[cfg(test)]
+    pub(crate) terminal: &'a mut Terminal<TestBackend>,
+
+    #[cfg(not(test))]
     pub(crate) terminal: &'a mut Terminal<CrosstermBackend<Stdout>>,
     // TODO this kinda feels hacky, find a better solution for this issue:
     // this is currently necessary because the most outer styleable widget should be able to override the style for a styleable widget

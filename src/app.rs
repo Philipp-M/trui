@@ -7,29 +7,36 @@ use crate::{
     },
 };
 use anyhow::Result;
+
+#[cfg(not(test))]
 use crossterm::{
     cursor,
-    event::{
-        poll, read, DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture,
-        Event as CxEvent, KeyCode, KeyEvent,
-    },
+    event::{DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture},
     execute,
     terminal::{
         disable_raw_mode, enable_raw_mode, BeginSynchronizedUpdate, EndSynchronizedUpdate,
         EnterAlternateScreen, LeaveAlternateScreen,
     },
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
-use std::{
-    collections::HashSet,
-    io::{stdout, Stdout, Write},
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+
+use crossterm::event::{poll, read, Event as CxEvent, KeyCode, KeyEvent};
+use ratatui::Terminal;
+
+#[cfg(not(test))]
+use std::io::stdout;
+
+use std::{collections::HashSet, path::PathBuf, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
 use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
+
+#[cfg(test)]
+use ratatui::backend::TestBackend;
+
+#[cfg(not(test))]
+use ratatui::backend::CrosstermBackend;
+#[cfg(not(test))]
+use std::io::{Stdout, Write};
 
 // TODO less hardcoding and cross-platform support
 fn setup_logging(log_level: tracing::Level) -> Result<tracing_appender::non_blocking::WorkerGuard> {
@@ -46,11 +53,19 @@ fn setup_logging(log_level: tracing::Level) -> Result<tracing_appender::non_bloc
     Ok(guard)
 }
 
-pub struct App<T, V: View<T>> {
+pub struct App<T: Send + 'static, V: View<T> + 'static> {
     req_chan: tokio::sync::mpsc::Sender<AppMessage>,
     render_response_chan: tokio::sync::mpsc::Receiver<RenderResponse<V, V::State>>,
     return_chan: tokio::sync::mpsc::Sender<(V, V::State, HashSet<Id>)>,
     event_chan: tokio::sync::mpsc::Receiver<Event>,
+
+    #[cfg(test)]
+    event_tx: tokio::sync::mpsc::Sender<Event>,
+
+    #[cfg(test)]
+    terminal: Terminal<TestBackend>,
+
+    #[cfg(not(test))]
     terminal: Terminal<CrosstermBackend<Stdout>>,
     size: Size,
     cursor_pos: Option<Point>,
@@ -116,8 +131,13 @@ enum UiState {
 
 impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     pub fn new(data: T, app_logic: impl FnMut(&mut T) -> V + Send + 'static) -> Self {
-        let backend = CrosstermBackend::new(stdout());
-        let terminal = Terminal::new(backend).unwrap(); // TODO handle errors...
+        #[cfg(not(test))]
+        let backend = CrosstermBackend::new(stdout()); // TODO handle errors...
+
+        #[cfg(test)]
+        let backend = TestBackend::new(80, 40);
+
+        let terminal = Terminal::new(backend).unwrap();
 
         // Create a new tokio runtime. Doing it here is hacky, we should allow
         // the client to do it.
@@ -177,13 +197,14 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         // Send this event here, so that the app renders directly when it is run.
         let _ = event_tx.blocking_send(Event::Start);
 
+        let event_tx_clone = event_tx.clone();
         // spawn app task
         rt.spawn(async move {
             let mut app_task = AppTask {
                 req_chan: message_rx,
                 response_chan: response_tx,
                 return_chan: return_rx,
-                event_chan: event_tx,
+                event_chan: event_tx_clone,
                 data,
                 app_logic,
                 view: None,
@@ -201,6 +222,10 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             render_response_chan: response_rx,
             return_chan: return_tx,
             event_chan: event_rx,
+
+            #[cfg(test)]
+            event_tx: event_tx.clone(),
+
             terminal,
             size: Size::default(),
             cursor_pos: None,
@@ -287,10 +312,18 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             };
 
             root_pod.paint(&mut paint_cx);
+
+            #[cfg(not(test))]
             execute!(stdout(), BeginSynchronizedUpdate)?;
+
             self.terminal.flush()?;
+
+            #[cfg(not(test))]
             execute!(stdout(), EndSynchronizedUpdate)?;
+
             self.terminal.swap_buffers();
+
+            #[cfg(not(test))]
             self.terminal.backend_mut().flush()?;
         }
         Ok(())
@@ -339,14 +372,8 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     pub fn run(mut self) -> Result<()> {
         let _guard = setup_logging(tracing::Level::DEBUG)?;
 
-        enable_raw_mode()?;
-        execute!(
-            stdout(),
-            EnterAlternateScreen,
-            EnableFocusChange,
-            EnableMouseCapture,
-            cursor::Hide
-        )?;
+        #[cfg(not(test))]
+        self.init_terminal()?;
 
         self.terminal.clear()?;
 
@@ -382,6 +409,24 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         }
         drop(main_loop_tracing_span);
 
+        Ok(())
+    }
+
+    #[cfg(not(test))]
+    fn init_terminal(&self) -> Result<()> {
+        enable_raw_mode()?;
+        execute!(
+            stdout(),
+            EnterAlternateScreen,
+            EnableFocusChange,
+            EnableMouseCapture,
+            cursor::Hide
+        )?;
+        Ok(())
+    }
+
+    #[cfg(not(test))]
+    fn restore_terminal(&self) -> Result<()> {
         execute!(
             stdout(),
             cursor::Show,
@@ -391,6 +436,25 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         )?;
         disable_raw_mode()?;
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub fn event_tx(&self) -> tokio::sync::mpsc::Sender<Event> {
+        self.event_tx.clone()
+    }
+
+    #[cfg(test)]
+    pub fn terminal_mut(&mut self) -> &mut Terminal<TestBackend> {
+        &mut self.terminal
+    }
+}
+
+/// Restore the terminal no matter how the app exits
+impl<T: Send + 'static, V: View<T> + 'static> Drop for App<T, V> {
+    fn drop(&mut self) {
+        #[cfg(not(test))]
+        self.restore_terminal()
+            .unwrap_or_else(|e| eprint!("Restoring the terminal failed: {e}"));
     }
 }
 
