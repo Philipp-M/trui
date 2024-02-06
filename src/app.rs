@@ -7,20 +7,25 @@ use crate::{
     },
 };
 use anyhow::Result;
+
+#[cfg(not(test))]
 use crossterm::{
     cursor,
-    event::{
-        poll, read, DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture,
-        Event as CxEvent, KeyCode, KeyEvent,
-    },
+    event::{DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture},
     execute,
     terminal::{
         disable_raw_mode, enable_raw_mode, BeginSynchronizedUpdate, EndSynchronizedUpdate,
         EnterAlternateScreen, LeaveAlternateScreen,
     },
 };
+
+use crossterm::event::{poll, read, Event as CxEvent, KeyCode, KeyEvent};
 use ratatui::Terminal;
-use std::{collections::HashSet, io::stdout, path::PathBuf, sync::Arc, time::Duration};
+
+#[cfg(not(test))]
+use std::io::stdout;
+
+use std::{collections::HashSet, path::PathBuf, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
 use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
@@ -307,13 +312,19 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             };
 
             root_pod.paint(&mut paint_cx);
-            execute!(stdout(), BeginSynchronizedUpdate)?;
-            self.terminal.flush()?;
-            execute!(stdout(), EndSynchronizedUpdate)?;
-            self.terminal.swap_buffers();
 
             #[cfg(not(test))]
-            self.terminal.backend_mut().flush()?;
+            {
+                execute!(stdout(), BeginSynchronizedUpdate)?;
+                self.terminal.flush()?;
+                execute!(stdout(), EndSynchronizedUpdate)?;
+                self.terminal.swap_buffers();
+
+                self.terminal.backend_mut().flush()?;
+            }
+
+            #[cfg(test)]
+            self.terminal.flush()?;
         }
         Ok(())
     }
@@ -361,14 +372,8 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     pub fn run(mut self) -> Result<()> {
         let _guard = setup_logging(tracing::Level::DEBUG)?;
 
-        enable_raw_mode()?;
-        execute!(
-            stdout(),
-            EnterAlternateScreen,
-            EnableFocusChange,
-            EnableMouseCapture,
-            cursor::Hide
-        )?;
+        #[cfg(not(test))]
+        self.init_terminal()?;
 
         self.terminal.clear()?;
 
@@ -407,7 +412,21 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         Ok(())
     }
 
-    fn cleanup(&self) -> Result<()> {
+    #[cfg(not(test))]
+    fn init_terminal(&self) -> Result<()> {
+        enable_raw_mode()?;
+        execute!(
+            stdout(),
+            EnterAlternateScreen,
+            EnableFocusChange,
+            EnableMouseCapture,
+            cursor::Hide
+        )?;
+        Ok(())
+    }
+
+    #[cfg(not(test))]
+    fn restore_terminal(&self) -> Result<()> {
         execute!(
             stdout(),
             cursor::Show,
@@ -433,7 +452,8 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
 /// Restore the terminal no matter how the app exits
 impl<T: Send + 'static, V: View<T> + 'static> Drop for App<T, V> {
     fn drop(&mut self) {
-        self.cleanup()
+        #[cfg(not(test))]
+        self.restore_terminal()
             .unwrap_or_else(|e| eprint!("Restoring the terminal failed: {e}"));
     }
 }
