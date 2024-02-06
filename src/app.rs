@@ -444,7 +444,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     }
 
     #[cfg(test)]
-    pub fn get_terminal(&mut self) -> &mut Terminal<TestBackend> {
+    pub fn terminal_mut(&mut self) -> &mut Terminal<TestBackend> {
         &mut self.terminal
     }
 }
