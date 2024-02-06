@@ -34,9 +34,9 @@ pub fn render_view<T: Send + 'static>(
         let mut app = App::new(state, move |_state| {
             debug_view(sut.clone(), message_tx.clone())
         });
-        event_tx_clone.blocking_send(app.get_event_tx()).unwrap();
+        event_tx_clone.blocking_send(app.event_tx()).unwrap();
 
-        app.get_terminal()
+        app.terminal_mut()
             .backend_mut()
             .resize(buffer_size.width, buffer_size.height);
 

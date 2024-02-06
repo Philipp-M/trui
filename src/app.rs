@@ -314,17 +314,17 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             root_pod.paint(&mut paint_cx);
 
             #[cfg(not(test))]
-            {
-                execute!(stdout(), BeginSynchronizedUpdate)?;
-                self.terminal.flush()?;
-                execute!(stdout(), EndSynchronizedUpdate)?;
-                self.terminal.swap_buffers();
+            execute!(stdout(), BeginSynchronizedUpdate)?;
 
-                self.terminal.backend_mut().flush()?;
-            }
-
-            #[cfg(test)]
             self.terminal.flush()?;
+
+            #[cfg(not(test))]
+            execute!(stdout(), EndSynchronizedUpdate)?;
+
+            self.terminal.swap_buffers();
+
+            #[cfg(not(test))]
+            self.terminal.backend_mut().flush()?;
         }
         Ok(())
     }
@@ -439,7 +439,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     }
 
     #[cfg(test)]
-    pub fn get_event_tx(&self) -> tokio::sync::mpsc::Sender<Event> {
+    pub fn event_tx(&self) -> tokio::sync::mpsc::Sender<Event> {
         self.event_tx.clone()
     }
 
