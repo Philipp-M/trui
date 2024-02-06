@@ -1,11 +1,16 @@
+use std::env;
+use std::io::stdout;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use crossterm::cursor::MoveToNextLine;
+use crossterm::execute;
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::backend::TestBackend;
 use ratatui::layout::Size;
-use ratatui::prelude::Buffer;
+use ratatui::prelude::*;
 use ratatui::style::Style;
-use ratatui::Terminal;
+use ratatui::{Terminal, TerminalOptions, Viewport};
 use tokio::sync::mpsc;
 use xilem_core::MessageResult;
 
@@ -49,6 +54,9 @@ pub fn render_view<T: Send + 'static>(
 
     event_tx.blocking_send(Event::Quit).unwrap();
     let _ = join_handle.join().unwrap();
+
+    print_buffer(&buffer).unwrap();
+
     buffer
 }
 
@@ -56,7 +64,7 @@ pub fn render_view<T: Send + 'static>(
 ///
 /// * `buffer_size` - The terminal output buffer is set to that size.
 /// * `sut` - (system under test) The widget to render.
-pub fn render_widget(buffer_size: Size, sut: &mut impl Widget) -> Terminal<TestBackend> {
+pub fn render_widget(buffer_size: Size, sut: &mut impl Widget) -> Buffer {
     let mut messages = vec![];
     let mut cx_state = CxState::new(&mut messages);
     let mut widget_state = WidgetState::new();
@@ -89,7 +97,10 @@ pub fn render_widget(buffer_size: Size, sut: &mut impl Widget) -> Terminal<TestB
     sut.paint(&mut paint_cx);
     terminal.flush().unwrap();
 
-    terminal
+    let buffer = terminal.backend().buffer().clone();
+    print_buffer(&buffer).unwrap();
+
+    buffer
 }
 
 /// This widget provides access to the terminal output of its children
@@ -189,4 +200,34 @@ impl Widget for DebugWidget {
     fn lifecycle(&mut self, cx: &mut crate::widget::LifeCycleCx, event: &crate::widget::LifeCycle) {
         self.content.lifecycle(cx, event);
     }
+}
+
+/// Utility for visual snapshot test debugging
+///
+/// If the environment variable `BEBUG_SNAPSHOT` is set when tests are run, the terminal buffer is
+/// dumped to stdout.
+///
+/// ```sh
+/// DEBUG_SNAPSHOT=1 cargo test --lib -- --nocapture --test simple_block_test
+/// ```
+///
+/// !!! The normal test output frequently interferes which results in scrambled output, especially
+/// when multiple tests are run at once.
+/// Running it multiple times might usually leads to good output (for now, with small widget output)
+pub fn print_buffer(buffer: &Buffer) -> std::io::Result<()> {
+    if env::var("DEBUG_SNAPSHOT").is_ok() {
+        enable_raw_mode()?;
+        execute!(stdout(), MoveToNextLine(0))?;
+        let mut terminal = Terminal::with_options(
+            CrosstermBackend::new(stdout()),
+            TerminalOptions {
+                viewport: Viewport::Inline(buffer.area.height),
+            },
+        )?;
+        terminal.current_buffer_mut().clone_from(buffer);
+        terminal.flush()?;
+        execute!(stdout(), MoveToNextLine(0))?;
+        disable_raw_mode()?;
+    };
+    Ok(())
 }

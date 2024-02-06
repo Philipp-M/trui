@@ -234,13 +234,13 @@ mod tests {
             false,
         );
 
-        let terminal = render_widget(
+        let buffer = render_widget(
             Size {
                 width: 15,
                 height: 5,
             },
             &mut sut,
         );
-        insta::assert_debug_snapshot!(terminal.backend().buffer());
+        insta::assert_debug_snapshot!(buffer);
     }
 }
