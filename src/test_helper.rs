@@ -124,14 +124,8 @@ where
     type Element = DebugWidget;
 
     fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
-        let (id, (state, element)) = cx.with_new_id(|cx| {
-            let (child_id, state, element) = self.content.build(cx);
-            (
-                (state, child_id),
-                DebugWidget::new(element, self.debug_chan_tx.clone()),
-            )
-        });
-        (id, state, element)
+        let (id, state, element) = self.content.build(cx);
+        (id, state, DebugWidget::new(element, self.debug_chan_tx.clone()))
     }
 
     fn rebuild(
@@ -163,15 +157,7 @@ where
         message: Box<dyn std::any::Any>,
         app_state: &mut T,
     ) -> MessageResult<A> {
-        if let Some((first, rest_path)) = id_path.split_first() {
-            if first == child_id {
-                self.content.message(rest_path, state, message, app_state)
-            } else {
-                xilem_core::MessageResult::Stale(message)
-            }
-        } else {
-            xilem_core::MessageResult::Nop
-        }
+        self.content.message(id_path, state, message, app_state)
     }
 }
 
