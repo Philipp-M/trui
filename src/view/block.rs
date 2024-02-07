@@ -318,7 +318,7 @@ mod tests {
 
     #[test]
     fn simple_block_test() {
-        let sut = Arc::new(block("some text"));
+        let sut = Arc::new(block("some text".fg(Color::Cyan)));
         let buffer = render_view(
             Size {
                 width: 15,
