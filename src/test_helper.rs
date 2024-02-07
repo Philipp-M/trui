@@ -204,7 +204,7 @@ impl Widget for DebugWidget {
 
 /// Utility for visual snapshot test debugging
 ///
-/// If the environment variable `BEBUG_SNAPSHOT` is set when tests are run, the terminal buffer is
+/// If the environment variable `DEBUG_SNAPSHOT` is set when tests are run, the terminal buffer is
 /// dumped to stdout.
 ///
 /// ```sh
