@@ -20,12 +20,13 @@ use crossterm::{
 };
 
 use crossterm::event::{poll, read, Event as CxEvent, KeyCode, KeyEvent};
+use directories::ProjectDirs;
 use ratatui::Terminal;
 
 #[cfg(not(test))]
 use std::io::stdout;
 
-use std::{collections::HashSet, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
 use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
@@ -40,7 +41,8 @@ use std::io::{Stdout, Write};
 
 // TODO less hardcoding and cross-platform support
 fn setup_logging(log_level: tracing::Level) -> Result<tracing_appender::non_blocking::WorkerGuard> {
-    let cache_dir = PathBuf::from(std::env::var_os("HOME").unwrap()).join(".cache/trui");
+    let proj_dirs = ProjectDirs::from("", "", "trui").expect("Opening cache directory");
+    let cache_dir = proj_dirs.cache_dir();
     let tracing_file_appender = tracing_appender::rolling::never(cache_dir, "trui.log");
     let (tracing_file_writer, guard) = tracing_appender::non_blocking(tracing_file_appender);
 
