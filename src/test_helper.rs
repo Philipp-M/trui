@@ -3,9 +3,6 @@ use std::io::stdout;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crossterm::cursor::MoveToNextLine;
-use crossterm::execute;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::backend::TestBackend;
 use ratatui::layout::Size;
 use ratatui::prelude::*;
@@ -208,7 +205,7 @@ impl Widget for DebugWidget {
 /// dumped to stdout.
 ///
 /// ```sh
-/// DEBUG_SNAPSHOT=1 cargo test --lib -- --nocapture --test simple_block_test
+/// DEBUG_SNAPSHOT=1 cargo test --lib -- --show-output --test simple_block_test
 /// ```
 ///
 /// !!! The normal test output frequently interferes which results in scrambled output, especially
@@ -216,18 +213,16 @@ impl Widget for DebugWidget {
 /// Running it multiple times might usually leads to good output (for now, with small widget output)
 pub fn print_buffer(buffer: &Buffer) -> std::io::Result<()> {
     if env::var("DEBUG_SNAPSHOT").is_ok() {
-        enable_raw_mode()?;
-        execute!(stdout(), MoveToNextLine(0))?;
         let mut terminal = Terminal::with_options(
             CrosstermBackend::new(stdout()),
             TerminalOptions {
-                viewport: Viewport::Inline(buffer.area.height),
+                viewport: Viewport::Fixed(buffer.area),
             },
         )?;
+
+        terminal.clear()?;
         terminal.current_buffer_mut().clone_from(buffer);
         terminal.flush()?;
-        execute!(stdout(), MoveToNextLine(0))?;
-        disable_raw_mode()?;
     };
     Ok(())
 }
