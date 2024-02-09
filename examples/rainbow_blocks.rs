@@ -1,8 +1,8 @@
 use anyhow::Result;
 use ratatui::style::Color;
 use trui::{
-    block, memoize, v_stack, AnyView, App, BorderKind, Borders, EventHandler, IntoBoxedView,
-    Styleable, View, ViewExt,
+    memoize, v_stack, AnyView, App, BorderKind, Borders, EventHandler, IntoBoxedView, Styleable,
+    View, ViewExt,
 };
 
 // TODO this basic logic (hover, styling etc.) should probably be its own widget (state)...
@@ -13,8 +13,9 @@ pub fn button<T>(
     hover_cb: impl EventHandler<T>,
     hover_lost_cb: impl EventHandler<T>,
 ) -> impl View<T> + Styleable {
-    block(label.into())
-        .with_borders(Borders::ALL)
+    label
+        .into()
+        .border(Borders::ALL)
         .fg(block_color)
         .on_click(click_cb)
         .on_hover(hover_cb)
@@ -45,10 +46,7 @@ pub fn rainbow_blocks<T: 'static>(
     let mut view = content.boxed();
     for i in 0..count {
         let color = rainbow((i as f32 / (count - 1) as f32 + 0.001).max(0.0).min(1.0));
-        view = block(view)
-            .with_borders(BorderKind::Rounded)
-            .fg(color)
-            .boxed();
+        view = view.border(BorderKind::Rounded).fg(color).boxed();
     }
     view
 }
@@ -94,7 +92,10 @@ fn main() -> Result<()> {
                 memoize(
                     (state.current_button_color2, state.count),
                     |(button_color, count)| {
-                        tracing::debug!("This will be printed on every change of state.current_button_color2 or state.count");
+                        tracing::debug!(
+                            "This will be printed on every change\
+                             of state.current_button_color2 or state.count"
+                        );
                         let count = *count;
                         let v: Box<dyn AnyView<_>> = if count <= 10 {
                             Box::new(format!(
@@ -104,22 +105,16 @@ fn main() -> Result<()> {
                         } else if count > 10 && count < 42 {
                             Box::new(format!("Count is bigger than 10 ({})", count).fg(Color::Gray))
                         } else if count == 42 {
-                            Box::new(
-                                block("You have found the sense of life!".fg(Color::Green))
-                                    .fg(Color::Red),
-                            )
+                            Box::new("You have found the sense of life!".fg(Color::Green))
                         } else {
                             let color = Color::Rgb(
                                 255usize.saturating_sub(count * 2) as u8,
                                 255usize.saturating_sub(count * 2) as u8,
                                 255usize.saturating_sub(count * 2) as u8,
                             );
-                            Box::new(
-                                block("Everything's downhill from here on...".fg(color)).fg(color),
-                            )
+                            Box::new("Everything's downhill from here on...".fg(color))
                         };
-                        block(v)
-                            .with_borders(BorderKind::DoubleStraight)
+                        v.border(BorderKind::DoubleStraight)
                             .fg(*button_color)
                             .on_click(|state: &mut AppState| {
                                 state.current_button_color2 = Color::Red;

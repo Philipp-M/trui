@@ -1,4 +1,4 @@
-mod block;
+mod border;
 mod common;
 mod core;
 mod defer;
@@ -17,7 +17,7 @@ pub use xilem_core::{Id, IdPath, VecSplice};
 
 // TODO do this via a prelude instead (and possibly not wildcard export)
 pub use self::core::*;
-pub use block::*;
+pub use border::*;
 pub use common::*;
 pub use defer::*;
 pub use events::*;
@@ -28,7 +28,7 @@ pub use text::*;
 pub use use_state::*;
 pub use weighted_linear_layout::*;
 
-// TODO this could maybe also be added directly to `View` (possibly copying the macro expanded version of it
+// TODO this could maybe also be added directly to `View` (possibly copying the macro expanded version of it)
 /// A trait that makes it possible to use core views such as [`Adapt`] in the continuation/builder style.
 pub trait ViewExt<T, A>: View<T, A> + Sized {
     fn adapt<ParentT, ParentA, F>(self, f: F) -> Adapt<ParentT, ParentA, T, A, Self, F>
@@ -53,6 +53,17 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
             content: self,
             position: style.position,
             amount: style.amount,
+            phantom: PhantomData,
+        }
+    }
+
+    fn border<S: Into<BorderStyle>>(self, style: S) -> Border<Self, T, A> {
+        let style = style.into();
+        Border {
+            content: self,
+            borders: style.borders,
+            kind: style.kind,
+            style: style.style,
             phantom: PhantomData,
         }
     }

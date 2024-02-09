@@ -13,8 +13,8 @@ fn button_with_state<T>(view: impl View<T>) -> impl View<T> {
     view.with_state(
         || 123,
         |view, n| {
-            block(v_stack((view, n.to_string())))
-                .with_borders(BorderKind::ThickStraight)
+            v_stack((view, n.to_string()))
+                .border(BorderKind::ThickStraight)
                 .on_click(|(_, l): &mut (Handle<T>, i32)| *l += 1)
         },
     )
@@ -26,8 +26,8 @@ fn button_with_state_accessor<T>(
     view: impl View<T>,
     access_local_state: impl Fn(&mut T) -> &mut i32 + Send + Sync,
 ) -> impl View<T> {
-    block(v_stack((view, access_local_state(state).to_string())))
-        .with_borders(BorderKind::Straight)
+    v_stack((view, access_local_state(state).to_string()))
+        .border(BorderKind::Straight)
         .on_click(move |state: &mut T| *access_local_state(state) += 1)
 }
 
@@ -38,8 +38,8 @@ fn button_use_state<T, V: View<(Handle<T>, i32)>>(
     use_state(
         || 123,
         move |n| {
-            block(v_stack((view(), n.to_string())))
-                .with_borders(BorderKind::DoubleStraight)
+            v_stack((view(), n.to_string()))
+                .border(BorderKind::DoubleStraight)
                 .on_click(|(_, n): &mut (Handle<T>, i32)| *n += 1)
         },
     )
@@ -54,8 +54,8 @@ fn main() -> Result<()> {
         |state| {
             let count = state.count;
             v_stack((
-                block(format!("Increment the global state: {}", state.count))
-                    .with_borders(BorderKind::Rounded)
+                format!("Increment the global state: {}", state.count)
+                    .border(BorderKind::Rounded)
                     .on_click(|state: &mut AppState| state.count += 1),
                 button_with_state(format!("With local state, app_state: {}", state.count)),
                 button_with_state_accessor(

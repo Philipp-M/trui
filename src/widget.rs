@@ -1,4 +1,4 @@
-mod block;
+mod border;
 mod box_constraints;
 
 #[cfg(not(test))]
@@ -19,7 +19,7 @@ pub use self::core::{
     Widget,
 };
 pub(crate) use self::core::{PodFlags, WidgetState};
-pub(crate) use block::Block;
+pub(crate) use border::Border;
 pub use box_constraints::BoxConstraints;
 pub use events::*;
 pub(crate) use fill_max_size::FillMaxSize;
