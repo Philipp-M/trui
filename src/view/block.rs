@@ -330,4 +330,18 @@ mod tests {
 
         insta::assert_debug_snapshot!(buffer);
     }
+
+    #[test]
+    fn too_small_block() {
+        let sut = Arc::new(block("some text".fg(Color::Cyan)).with_borders(BorderKind::Straight));
+        let buffer = render_view(
+            Size {
+                width: 7,
+                height: 5,
+            },
+            sut,
+            AppState,
+        );
+        insta::assert_debug_snapshot!(buffer);
+    }
 }

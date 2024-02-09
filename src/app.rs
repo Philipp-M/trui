@@ -371,9 +371,13 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         }
     }
 
-    pub fn run(mut self) -> Result<()> {
+    pub fn run(self) -> Result<()> {
         let _guard = setup_logging(tracing::Level::DEBUG)?;
+        self.run_without_logging()
+    }
 
+    // TODO(zoechi): setup proper configuration for App
+    pub fn run_without_logging(mut self) -> Result<()> {
         #[cfg(not(test))]
         self.init_terminal()?;
 
