@@ -3,16 +3,15 @@ use std::io::stdout;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use ratatui::backend::TestBackend;
 use ratatui::layout::Size;
 use ratatui::prelude::*;
-use ratatui::style::Style;
+
 use ratatui::{Terminal, TerminalOptions, Viewport};
 use tokio::sync::mpsc;
 use xilem_core::MessageResult;
 
 use crate::widget::{BoxConstraints, ChangeFlags, Event};
-use crate::widget::{CxState, LayoutCx, PaintCx, Pod, Widget, WidgetState};
+use crate::widget::{Pod, Widget};
 use crate::{App, Cx, View, ViewMarker};
 
 /// Render a view and return the terminal to check the generated output
@@ -56,49 +55,6 @@ pub fn render_view<T: Send + 'static>(
     send_quit_ack.unwrap();
     let buffer = buffer.unwrap();
 
-    print_buffer(&buffer).unwrap();
-
-    buffer
-}
-
-/// Render a widget and return the terminal to check the generated output
-///
-/// * `buffer_size` - The terminal output buffer is set to that size.
-/// * `sut` - (system under test) The widget to render.
-pub fn render_widget(buffer_size: Size, sut: &mut impl Widget) -> Buffer {
-    let mut messages = vec![];
-    let mut cx_state = CxState::new(&mut messages);
-    let mut widget_state = WidgetState::new();
-
-    let mut layout_cx = LayoutCx {
-        cx_state: &mut cx_state,
-        widget_state: &mut widget_state,
-    };
-    let backend = TestBackend::new(buffer_size.width, buffer_size.height);
-
-    let mut terminal = Terminal::new(backend).unwrap();
-    let _size = sut.layout(
-        &mut layout_cx,
-        &BoxConstraints::new(
-            kurbo::Size::ZERO,
-            kurbo::Size {
-                width: buffer_size.width.into(),
-                height: buffer_size.height.into(),
-            },
-        ),
-    );
-
-    let mut paint_cx = PaintCx {
-        cx_state: &mut cx_state,
-        widget_state: &mut widget_state,
-        terminal: &mut terminal,
-        override_style: Style::default(),
-    };
-
-    sut.paint(&mut paint_cx);
-    terminal.flush().unwrap();
-
-    let buffer = terminal.backend().buffer().clone();
     print_buffer(&buffer).unwrap();
 
     buffer
