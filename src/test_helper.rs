@@ -42,15 +42,19 @@ pub fn render_view<T: Send + 'static>(
             .backend_mut()
             .resize(buffer_size.width, buffer_size.height);
 
-        app.run()
+        app.run_without_logging().unwrap()
     });
 
     let event_tx = event_rx.blocking_recv().unwrap();
 
-    let buffer = message_rx.blocking_recv().unwrap();
+    let buffer = message_rx.blocking_recv();
+    let send_quit_ack = event_tx.blocking_send(Event::Quit);
 
-    event_tx.blocking_send(Event::Quit).unwrap();
-    let _ = join_handle.join().unwrap();
+    join_handle.join().unwrap();
+
+    // delay unwrapping until after join_handle.join() to not mask errors from the spawned thread
+    send_quit_ack.unwrap();
+    let buffer = buffer.unwrap();
 
     print_buffer(&buffer).unwrap();
 
@@ -205,7 +209,7 @@ impl Widget for DebugWidget {
 /// dumped to stdout.
 ///
 /// ```sh
-/// DEBUG_SNAPSHOT=1 cargo test --lib -- --show-output --test simple_block_test
+/// DEBUG_SNAPSHOT=1 cargo test --lib -- --nocapture --test simple_block_test
 /// ```
 ///
 /// !!! The normal test output frequently interferes which results in scrambled output, especially
