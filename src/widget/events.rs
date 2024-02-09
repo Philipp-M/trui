@@ -214,23 +214,23 @@ impl<E: Widget> Widget for OnClick<E> {
     }
 }
 
-pub struct OnHover<E> {
-    pub element: E,
+pub struct OnHover {
+    pub(crate) element: Pod,
     id_path: IdPath,
     is_hovering: bool,
 }
 
-impl<E> OnHover<E> {
-    pub fn new(element: E, id_path: &IdPath) -> Self {
+impl OnHover {
+    pub fn new<E: Widget>(element: E, id_path: &IdPath) -> Self {
         OnHover {
-            element,
+            element: Pod::new(element),
             is_hovering: false,
             id_path: id_path.clone(),
         }
     }
 }
 
-impl<E: Widget> Widget for OnHover<E> {
+impl Widget for OnHover {
     fn paint(&mut self, cx: &mut PaintCx) {
         self.element.paint(cx);
     }
@@ -257,23 +257,23 @@ impl<E: Widget> Widget for OnHover<E> {
     }
 }
 
-pub struct OnHoverLost<E> {
-    pub element: E,
+pub struct OnHoverLost {
+    pub element: Pod,
     id_path: IdPath,
     is_hovering: bool,
 }
 
-impl<E> OnHoverLost<E> {
-    pub fn new(element: E, id_path: &IdPath) -> Self {
+impl OnHoverLost {
+    pub fn new<E: Widget>(element: E, id_path: &IdPath) -> Self {
         OnHoverLost {
-            element,
+            element: Pod::new(element),
             is_hovering: false,
             id_path: id_path.clone(),
         }
     }
 }
 
-impl<E: Widget> Widget for OnHoverLost<E> {
+impl Widget for OnHoverLost {
     fn paint(&mut self, cx: &mut PaintCx) {
         self.element.paint(cx);
     }
@@ -300,23 +300,23 @@ impl<E: Widget> Widget for OnHoverLost<E> {
     }
 }
 
-pub struct StyleOnHover<E> {
-    pub element: E,
+pub struct StyleOnHover {
+    pub element: Pod,
     is_hovering: bool,
     pub(crate) style: Style,
 }
 
-impl<E> StyleOnHover<E> {
-    pub fn new(element: E, style: Style) -> Self {
+impl StyleOnHover {
+    pub fn new<E: Widget>(element: E, style: Style) -> Self {
         StyleOnHover {
-            element,
+            element: Pod::new(element),
             style,
             is_hovering: false,
         }
     }
 }
 
-impl<E: Widget> Widget for StyleOnHover<E> {
+impl Widget for StyleOnHover {
     fn paint(&mut self, cx: &mut PaintCx) {
         if cx.is_hot() {
             cx.override_style = self.style.patch(cx.override_style);
@@ -344,23 +344,21 @@ impl<E: Widget> Widget for StyleOnHover<E> {
     }
 }
 
-pub struct StyleOnPressed<E> {
+pub struct StyleOnPressed {
     pub(crate) element: Pod,
     pub(crate) style: Style,
-    phantom: PhantomData<E>,
 }
 
-impl<E: Widget> StyleOnPressed<E> {
-    pub fn new(element: E, style: Style) -> Self {
+impl StyleOnPressed {
+    pub fn new<E: Widget>(element: E, style: Style) -> Self {
         StyleOnPressed {
             element: Pod::new(element),
             style,
-            phantom: PhantomData,
         }
     }
 }
 
-impl<E: Widget> Widget for StyleOnPressed<E> {
+impl Widget for StyleOnPressed {
     fn paint(&mut self, cx: &mut PaintCx) {
         if cx.is_active() {
             cx.override_style = self.style.patch(cx.override_style);

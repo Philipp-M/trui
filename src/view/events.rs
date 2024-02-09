@@ -517,7 +517,7 @@ where
 {
     type State = V::State;
 
-    type Element = widget::StyleOnHover<V::Element>;
+    type Element = widget::StyleOnHover;
 
     fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, state, element) = self.view.build(cx);
@@ -538,9 +538,13 @@ where
             element.style = self.style;
             changeflags |= ChangeFlags::PAINT;
         }
-        changeflags |= self
-            .view
-            .rebuild(cx, &prev.view, id, state, &mut element.element);
+        changeflags |= self.view.rebuild(
+            cx,
+            &prev.view,
+            id,
+            state,
+            element.element.downcast_mut().unwrap(),
+        );
         changeflags
     }
 
@@ -562,7 +566,7 @@ where
 {
     type State = (V::State, Id);
 
-    type Element = widget::StyleOnPressed<V::Element>;
+    type Element = widget::StyleOnPressed;
 
     fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, (state, element)) = cx.with_new_id(|cx| {
@@ -639,7 +643,7 @@ macro_rules! event_views {
         {
             type State = (V::State, Id, (Id, EH::State));
 
-            type Element = widget::$name<V::Element>;
+            type Element = widget::$name;
 
             fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
                 let (id, (state, element)) = cx.with_new_id(|cx| {
@@ -664,7 +668,7 @@ macro_rules! event_views {
                         &prev.view,
                         child_id,
                         state,
-                        &mut element.element,
+                        element.element.downcast_mut().unwrap(),
                     )
                 });
 
