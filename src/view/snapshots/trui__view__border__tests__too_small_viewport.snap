@@ -1,5 +1,5 @@
 ---
-source: src/view/block.rs
+source: src/view/border.rs
 expression: buffer
 ---
 Buffer {

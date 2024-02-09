@@ -31,8 +31,8 @@ pub fn words_stream(input: &str) -> impl Stream<Item = String> + Send {
 fn main() -> Result<()> {
     App::new(String::new(), |app_state| {
         v_stack((
-            block("Click me for some non-sense")
-                .with_borders(BorderKind::Rounded)
+            "Click me for some non-sense"
+                .border(BorderKind::Rounded)
                 .on_hover_fg(Color::Blue)
                 .on_pressed_fg(Color::Red)
                 .on_click(stream(
@@ -60,8 +60,8 @@ fn main() -> Result<()> {
                         StreamMessage::Finished => (),
                     },
                 )),
-            block("Click me for some non-sense, but only once")
-                .with_borders(BorderKind::Rounded)
+            "Click me for some non-sense, but only once"
+                .border(BorderKind::Rounded)
                 .on_hover_fg(Color::Blue)
                 .on_pressed_fg(Color::Green)
                 .on_click(defer(
@@ -80,8 +80,9 @@ fn main() -> Result<()> {
                         *app_state += &message;
                     },
                 )),
-            block(app_state.clone()) //.wrapped()
-                .with_borders(())
+            app_state
+                .clone() //.wrapped()
+                .border(())
                 .fg(if app_state.is_empty() {
                     Color::White
                 } else {

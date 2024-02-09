@@ -209,7 +209,7 @@ impl Widget for DebugWidget {
 /// dumped to stdout.
 ///
 /// ```sh
-/// DEBUG_SNAPSHOT=1 cargo test --lib -- --nocapture --test simple_block_test
+/// DEBUG_SNAPSHOT=1 cargo test --lib -- --nocapture --test simple_border_test
 /// ```
 ///
 /// !!! The normal test output frequently interferes which results in scrambled output, especially
