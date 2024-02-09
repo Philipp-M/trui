@@ -3,9 +3,6 @@ use std::io::stdout;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crossterm::cursor::MoveToNextLine;
-use crossterm::execute;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::backend::TestBackend;
 use ratatui::layout::Size;
 use ratatui::prelude::*;
@@ -45,15 +42,19 @@ pub fn render_view<T: Send + 'static>(
             .backend_mut()
             .resize(buffer_size.width, buffer_size.height);
 
-        app.run()
+        app.run_without_logging().unwrap()
     });
 
     let event_tx = event_rx.blocking_recv().unwrap();
 
-    let buffer = message_rx.blocking_recv().unwrap();
+    let buffer = message_rx.blocking_recv();
+    let send_quit_ack = event_tx.blocking_send(Event::Quit);
 
-    event_tx.blocking_send(Event::Quit).unwrap();
-    let _ = join_handle.join().unwrap();
+    join_handle.join().unwrap();
+
+    // delay unwrapping until after join_handle.join() to not mask errors from the spawned thread
+    send_quit_ack.unwrap();
+    let buffer = buffer.unwrap();
 
     print_buffer(&buffer).unwrap();
 
@@ -216,18 +217,17 @@ impl Widget for DebugWidget {
 /// Running it multiple times might usually leads to good output (for now, with small widget output)
 pub fn print_buffer(buffer: &Buffer) -> std::io::Result<()> {
     if env::var("DEBUG_SNAPSHOT").is_ok() {
-        enable_raw_mode()?;
-        execute!(stdout(), MoveToNextLine(0))?;
         let mut terminal = Terminal::with_options(
             CrosstermBackend::new(stdout()),
             TerminalOptions {
-                viewport: Viewport::Inline(buffer.area.height),
+                viewport: Viewport::Fixed(buffer.area),
             },
         )?;
+
+        terminal.clear()?;
         terminal.current_buffer_mut().clone_from(buffer);
         terminal.flush()?;
-        execute!(stdout(), MoveToNextLine(0))?;
-        disable_raw_mode()?;
+        crossterm::queue!(stdout(), crossterm::cursor::MoveTo(0, buffer.area.height))?;
     };
     Ok(())
 }
