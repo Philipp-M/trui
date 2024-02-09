@@ -223,6 +223,7 @@ pub fn print_buffer(buffer: &Buffer) -> std::io::Result<()> {
         terminal.clear()?;
         terminal.current_buffer_mut().clone_from(buffer);
         terminal.flush()?;
+        crossterm::queue!(stdout(), crossterm::cursor::MoveTo(0, buffer.area.height))?;
     };
     Ok(())
 }
