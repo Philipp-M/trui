@@ -7,8 +7,25 @@ use ratatui::style::Style;
 
 use super::{
     core::{IdPath, PaintCx},
-    Event, EventCx, LayoutCx, Message, Pod, Widget,
+    EventCx, LayoutCx, Message, Pod, Widget,
 };
+
+#[derive(Debug, Clone)]
+pub enum Event {
+    /// Only sent once at the start of the application
+    Start,
+    Quit,
+    /// Sent e.g. when a future requests waking up the application
+    Wake,
+    FocusLost,
+    FocusGained,
+    Resize {
+        width: u16,
+        height: u16,
+    },
+    Mouse(RawMouseEvent),
+    Key(crossterm::event::KeyEvent),
+}
 
 #[derive(Debug)]
 pub enum LifeCycle {
@@ -22,6 +39,25 @@ pub struct ViewContext {
     pub window_origin: Point,
     // pub clip: Rect,
     pub mouse_position: Option<Point>,
+}
+
+#[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct RawMouseEvent {
+    pub kind: MouseEventKind,
+    pub column: i16,
+    pub row: i16,
+    pub modifiers: crossterm::event::KeyModifiers,
+}
+
+impl From<crossterm::event::MouseEvent> for RawMouseEvent {
+    fn from(event: crossterm::event::MouseEvent) -> Self {
+        RawMouseEvent {
+            kind: event.kind,
+            column: event.column as i16,
+            row: event.row as i16,
+            modifiers: event.modifiers,
+        }
+    }
 }
 
 impl ViewContext {
@@ -42,19 +78,21 @@ impl ViewContext {
     }
 }
 
+// TODO separate the widgets etc. into its own module?
+
 #[derive(Debug)]
 /// A message representing a mouse event.
 pub struct MouseEvent {
     pub over_element: bool,
     pub is_active: bool,
     pub kind: MouseEventKind,
-    pub column: u16,
-    pub row: u16,
+    pub column: i16,
+    pub row: i16,
     pub modifiers: crossterm::event::KeyModifiers,
 }
 
 impl MouseEvent {
-    fn new(event: crossterm::event::MouseEvent, over_element: bool, is_active: bool) -> Self {
+    fn new(event: RawMouseEvent, over_element: bool, is_active: bool) -> Self {
         MouseEvent {
             over_element,
             is_active,
@@ -108,7 +146,7 @@ impl<E: Widget> Widget for OnMouse<E> {
 
         match event {
             Event::Mouse(
-                event @ crossterm::event::MouseEvent {
+                event @ RawMouseEvent {
                     kind: MouseEventKind::Down(button),
                     ..
                 },
@@ -128,7 +166,7 @@ impl<E: Widget> Widget for OnMouse<E> {
                     ));
                 }
             }
-            Event::Mouse(event @ crossterm::event::MouseEvent { kind, .. }) => {
+            Event::Mouse(event @ RawMouseEvent { kind, .. }) => {
                 let is_active = cx.is_active();
                 if matches!(kind, MouseEventKind::Up(_)) {
                     cx.set_active(false);
@@ -188,7 +226,7 @@ impl<E: Widget> Widget for OnClick<E> {
     fn event(&mut self, cx: &mut EventCx, event: &Event) {
         self.element.event(cx, event);
 
-        if let Event::Mouse(crossterm::event::MouseEvent {
+        if let Event::Mouse(RawMouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             ..
         }) = event
@@ -197,7 +235,7 @@ impl<E: Widget> Widget for OnClick<E> {
         }
 
         // TODO handle other events like e.g. FocusLost
-        if let Event::Mouse(crossterm::event::MouseEvent {
+        if let Event::Mouse(RawMouseEvent {
             kind: MouseEventKind::Up(MouseButton::Left),
             ..
         }) = event
@@ -374,14 +412,14 @@ impl Widget for StyleOnPressed {
         self.element.event(cx, event);
 
         match event {
-            Event::Mouse(crossterm::event::MouseEvent {
+            Event::Mouse(RawMouseEvent {
                 kind: MouseEventKind::Down(MouseButton::Left),
                 ..
             }) => {
                 cx.request_paint();
                 cx.set_active(cx.is_hot());
             }
-            Event::Mouse(crossterm::event::MouseEvent {
+            Event::Mouse(RawMouseEvent {
                 kind: MouseEventKind::Up(MouseButton::Left) | MouseEventKind::Moved,
                 ..
             })

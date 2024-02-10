@@ -177,7 +177,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
                             code: KeyCode::Esc, ..
                         })) => Event::Quit,
                         Ok(CxEvent::Key(key_event)) => Event::Key(key_event),
-                        Ok(CxEvent::Mouse(mouse_event)) => Event::Mouse(mouse_event),
+                        Ok(CxEvent::Mouse(mouse_event)) => Event::Mouse(mouse_event.into()),
                         Ok(CxEvent::FocusGained) => Event::FocusGained,
                         Ok(CxEvent::FocusLost) => Event::FocusLost,
                         // CxEvent::Paste(_) => todo!(),

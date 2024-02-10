@@ -15,8 +15,7 @@ mod text;
 mod weighted_linear_layout;
 
 pub use self::core::{
-    AnyWidget, ChangeFlags, CxState, Event, EventCx, LayoutCx, LifeCycleCx, Message, PaintCx, Pod,
-    Widget,
+    AnyWidget, ChangeFlags, CxState, EventCx, LayoutCx, LifeCycleCx, Message, PaintCx, Pod, Widget,
 };
 pub(crate) use self::core::{PodFlags, WidgetState};
 pub(crate) use border::Border;

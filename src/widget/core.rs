@@ -1,8 +1,7 @@
-use super::{BoxConstraints, LifeCycle};
+use super::{BoxConstraints, Event, LifeCycle};
 use crate::geometry::{Point, Rect, Size};
 use bitflags::bitflags;
-pub use crossterm::event::MouseEvent;
-use crossterm::event::{KeyEvent, MouseEventKind};
+use crossterm::event::MouseEventKind;
 use ratatui::Terminal;
 use std::{any::Any, ops::DerefMut};
 use xilem_core::{message, Id};
@@ -17,24 +16,6 @@ use ratatui::backend::CrosstermBackend;
 use std::io::Stdout;
 
 message!(Send);
-
-#[derive(Debug, Clone)]
-pub enum Event {
-    /// Only sent once at the start of the application
-    Start,
-    Quit,
-    /// Sent e.g. when a future requests waking up the application
-    Wake,
-    FocusLost,
-    FocusGained,
-    Resize {
-        width: u16,
-        height: u16,
-    },
-    // TODO create a custom type...
-    Mouse(MouseEvent),
-    Key(KeyEvent),
-}
 
 /// Static state that is shared between most contexts.
 pub struct CxState<'a> {
@@ -471,8 +452,8 @@ impl Pod {
                 {
                     let mut mouse_event = *mouse_event;
                     let (x, y) = (
-                        self.state.origin.x.round() as u16,
-                        self.state.origin.y.round() as u16,
+                        self.state.origin.x.round() as i16,
+                        self.state.origin.y.round() as i16,
                     );
                     mouse_event.column = mouse_event.column.saturating_sub(x);
                     mouse_event.row = mouse_event.row.saturating_sub(y);
