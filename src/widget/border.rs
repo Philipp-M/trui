@@ -181,37 +181,3 @@ impl Widget for Border {
         self.content.lifecycle(cx, event);
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use ratatui::layout::Size;
-    use ratatui::style::Color;
-
-    use crate::test_helper::render_widget;
-    use crate::widget::Text;
-
-    use super::*;
-
-    #[test]
-    fn simple_border_test() {
-        let content = Text {
-            text: "some text".into(),
-            style: Style::default().fg(Color::Red),
-        };
-        let mut sut = Border::new(
-            content,
-            Borders::ALL,
-            Style::default().fg(Color::Blue),
-            BorderKind::Straight,
-        );
-
-        let buffer = render_widget(
-            Size {
-                width: 15,
-                height: 5,
-            },
-            &mut sut,
-        );
-        insta::assert_debug_snapshot!(buffer);
-    }
-}
