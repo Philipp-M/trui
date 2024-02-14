@@ -1,3 +1,4 @@
+mod animatable_value;
 mod border;
 mod common;
 mod core;
@@ -17,6 +18,7 @@ pub use xilem_core::{Id, IdPath, VecSplice};
 
 // TODO do this via a prelude instead (and possibly not wildcard export)
 pub use self::core::*;
+pub use animatable_value::*;
 pub use border::*;
 pub use common::*;
 pub use defer::*;
@@ -68,7 +70,10 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         }
     }
 
-    fn fill_max_size<S: Into<FillMaxSizeStyle>>(self, style: S) -> FillMaxSize<Self, T, A> {
+    fn fill_max_size<P: Animatable<Value = f64>, S: IntoFillMaxSizeStyle<T, A, P>>(
+        self,
+        style: S,
+    ) -> FillMaxSize<Self, P, T, A> {
         let style = style.into();
         FillMaxSize {
             content: self,
@@ -78,7 +83,7 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         }
     }
 
-    fn fill_max_width(self, percent: f64) -> FillMaxSize<Self, T, A> {
+    fn fill_max_width<P: Animatable<Value = f64>>(self, percent: P) -> FillMaxSize<Self, P, T, A> {
         FillMaxSize {
             content: self,
             fill: Fill::WIDTH,
@@ -87,7 +92,7 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         }
     }
 
-    fn fill_max_height(self, percent: f64) -> FillMaxSize<Self, T, A> {
+    fn fill_max_height<P: Animatable<Value = f64>>(self, percent: P) -> FillMaxSize<Self, P, T, A> {
         FillMaxSize {
             content: self,
             fill: Fill::HEIGHT,
@@ -103,7 +108,7 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         }
     }
 
-    fn weight(self, weight: f64) -> WeightedLayoutElement<Self, T, A> {
+    fn weight<W: Animatable<Value = f64>>(self, weight: W) -> WeightedLayoutElement<Self, W, T, A> {
         WeightedLayoutElement {
             content: self,
             weight,
