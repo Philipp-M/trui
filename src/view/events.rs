@@ -1,8 +1,8 @@
 use super::{Cx, PendingTask, Styleable, View, ViewMarker};
 use crate::widget::{self, CatchMouseButton, ChangeFlags};
-use futures_task::Waker;
 use futures_util::{Future, Stream, StreamExt};
 use ratatui::style::Style;
+use std::task::Waker;
 use std::{marker::PhantomData, sync::Arc};
 use tokio::{runtime::Runtime, sync::mpsc::Receiver, task::JoinHandle};
 use xilem_core::{AsyncWake, Id, MessageResult};

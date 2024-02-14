@@ -59,6 +59,16 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         }
     }
 
+    /// # Examples
+    /// ```
+    /// use trui::*;
+    /// App::new((), move |()| {
+    ///    v_stack((
+    ///        "Text with border".border(BorderKind::Rounded),
+    ///        "Other style".border((Borders::VERTICAL, Style::default().fg(Color::Red))),
+    ///    ))
+    /// });
+    /// ```
     fn border<S: Into<BorderStyle>>(self, style: S) -> Border<Self, T, A> {
         let style = style.into();
         Border {
@@ -70,7 +80,16 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         }
     }
 
-    fn fill_max_size<P: Animatable<Value = f64>, S: IntoFillMaxSizeStyle<T, A, P>>(
+    /// # Examples
+    /// ```
+    /// use trui::*;
+    /// App::new((), move |()| {
+    ///    "Fill half of the parent width/height"
+    ///        .border(BorderKind::Rounded)
+    ///        .fill_max_size(0.5)
+    /// });
+    /// ```
+    fn fill_max_size<P: Animatable<Value = f64>, S: IntoFillMaxSizeStyle<P>>(
         self,
         style: S,
     ) -> FillMaxSize<Self, P, T, A> {

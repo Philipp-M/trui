@@ -12,7 +12,7 @@ use anyhow::Result;
 use crossterm::{
     cursor,
     event::{DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture},
-    execute,
+    execute, queue,
     terminal::{
         disable_raw_mode, enable_raw_mode, BeginSynchronizedUpdate, EndSynchronizedUpdate,
         EnterAlternateScreen, LeaveAlternateScreen,
@@ -26,8 +26,11 @@ use ratatui::Terminal;
 #[cfg(not(test))]
 use std::io::stdout;
 
-use std::{collections::HashSet, sync::Arc, time::Duration};
-use tokio::runtime::Runtime;
+use std::{
+    collections::HashSet,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
 use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
 
@@ -69,6 +72,7 @@ pub struct App<T: Send + 'static, V: View<T> + 'static> {
 
     #[cfg(not(test))]
     terminal: Terminal<CrosstermBackend<Stdout>>,
+    time_since_last_rebuild: Instant,
     size: Size,
     cursor_pos: Option<Point>,
     events: Vec<Message>,
@@ -143,7 +147,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
 
         // Create a new tokio runtime. Doing it here is hacky, we should allow
         // the client to do it.
-        let rt = Runtime::new().unwrap();
+        let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
 
         // Note: there is danger of deadlock if exceeded; think this through.
         const CHANNEL_SIZE: usize = 1000;
@@ -163,6 +167,30 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         std::thread::spawn(move || {
             while let Ok(id_path) = wake_rx.recv() {
                 let _ = message_tx_clone.blocking_send(AppMessage::Wake(id_path));
+            }
+        });
+
+        let request_frame_update = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let frame_update_notifier = Arc::new(tokio::sync::Notify::new());
+
+        let update_requested_clone = Arc::clone(&request_frame_update);
+        let frame_update_notifier_clone = Arc::clone(&frame_update_notifier);
+        let event_tx_clone = event_tx.clone();
+
+        // Until we have a solid way to sync with the screen refresh rate, do an update every 1/60 secs when it is requested
+        rt.spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs_f64(1.0 / 60.0));
+            loop {
+                frame_update_notifier_clone.notified().await;
+                interval.tick().await;
+
+                if update_requested_clone.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                    let _ = event_tx_clone.send(Event::Wake).await;
+                }
+
+                if event_tx_clone.is_closed() {
+                    break;
+                }
             }
         });
 
@@ -217,7 +245,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             app_task.run().await;
         });
 
-        let cx = Cx::new(&wake_tx, Arc::new(rt));
+        let cx = Cx::new(&wake_tx, rt, frame_update_notifier, request_frame_update);
 
         App {
             req_chan: message_tx,
@@ -236,6 +264,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             id: None,
             root_state: WidgetState::new(),
             events: Vec::new(),
+            time_since_last_rebuild: Instant::now(),
         }
     }
 
@@ -316,7 +345,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             root_pod.paint(&mut paint_cx);
 
             #[cfg(not(test))]
-            execute!(stdout(), BeginSynchronizedUpdate)?;
+            queue!(stdout(), BeginSynchronizedUpdate)?;
 
             self.terminal.flush()?;
 
@@ -340,6 +369,8 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         if let Some(response) = self.render_response_chan.blocking_recv() {
             let state = if let Some(widget) = self.root_pod.as_mut() {
                 let mut state = response.state.unwrap();
+                self.cx.time_since_last_render = Some(self.time_since_last_rebuild.elapsed());
+                self.time_since_last_rebuild = Instant::now();
                 let changes = response.view.rebuild(
                     &mut self.cx,
                     response.prev.as_ref().unwrap(),
@@ -354,6 +385,8 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
                 assert!(self.cx.is_empty(), "id path imbalance on rebuild");
                 state
             } else {
+                self.cx.time_since_last_render = None;
+                self.time_since_last_rebuild = Instant::now();
                 let (id, state, widget) = response.view.build(&mut self.cx);
                 assert!(self.cx.is_empty(), "id path imbalance on build");
                 self.root_pod = Some(Pod::new(widget));

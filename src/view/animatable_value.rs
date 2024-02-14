@@ -1,12 +1,9 @@
 use std::{
     marker::PhantomData,
     ops::{Add, Mul, Sub},
-    sync::Arc,
-    task::Waker,
     time::Duration,
 };
 
-use tokio::runtime::Runtime;
 use xilem_core::{AsyncWake, Id, MessageResult};
 
 use crate::{widget::ChangeFlags, Cx};
@@ -18,7 +15,7 @@ pub trait Animatable: Send + Sync {
     /// Associated state for the view.
     type State: Send;
 
-    type Value; //: Send + Sync; // bounds not really necessary, but currently it reduces some boilerplate, because the `Value` is stored in views
+    type Value;
 
     /// Build the associated widget and initialize state.
     fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Value);
@@ -197,101 +194,13 @@ pub struct LowPassIIR<AT> {
     target: AT,
 }
 
-enum LowPassIIRMessage {
-    TargetValueChanged(f64),
-    DecayChanged(f64),
-}
-
-pub struct LowPassIIRState<ATS> {
-    target_state: ATS,
-    target_id: Id,
-    target_value: f64,
-    value: f64,
-    message_tx: Option<tokio::sync::mpsc::Sender<LowPassIIRMessage>>,
-    new_value_rx: Option<tokio::sync::mpsc::Receiver<f64>>,
-    task: Option<tokio::task::JoinHandle<()>>,
-    waker: Waker,
-    runtime: Arc<Runtime>,
-}
-
-impl<ATS> LowPassIIRState<ATS> {
-    fn start_or_wake(&mut self, mut decay: f64) {
-        if self.task_finished() {
-            let (message_tx, mut message_rx) = tokio::sync::mpsc::channel(100);
-            let (new_value_tx, new_value_rx) = tokio::sync::mpsc::channel(100);
-            self.message_tx = Some(message_tx);
-            self.new_value_rx = Some(new_value_rx);
-
-            let mut target_value = self.target_value;
-            let mut value = self.value;
-            let mut finished = false;
-            let waker = self.waker.clone();
-
-            self.task = Some(self.runtime.spawn(async move {
-                // ideally the screen refresh rate, but this should do it for now...
-                let mut interval = tokio::time::interval(Duration::from_secs_f64(1.0 / 60.0));
-
-                while !finished {
-                    tokio::select! {
-                        _ = interval.tick() => {
-                            let needs_update = (target_value.abs() - value.abs()).abs() > 0.001;
-                            // tracing::info!("needs_update: {needs_update}");
-                            value += decay.clamp(0.0, 1.0) * (target_value - value);
-
-                            if !needs_update || new_value_tx.send(value).await.is_err() {
-                                finished = true;
-                            } else {
-                                waker.wake_by_ref();
-                            }
-                        }
-                        message = message_rx.recv() => {
-                            match message {
-                                Some(LowPassIIRMessage::TargetValueChanged(new_value)) => target_value = new_value,
-                                Some(LowPassIIRMessage::DecayChanged(new_decay)) => decay = new_decay,
-                                None => finished = true
-                            }
-                        }
-                    };
-                }
-                tracing::info!("Low pass Finished!");
-            }));
-        } else if let Some(message_tx) = self.message_tx.as_ref() {
-            let _ = message_tx.blocking_send(LowPassIIRMessage::DecayChanged(decay));
-            let _ =
-                message_tx.blocking_send(LowPassIIRMessage::TargetValueChanged(self.target_value));
-        }
-    }
-
-    fn task_finished(&self) -> bool {
-        self.task.as_ref().map(|t| t.is_finished()).unwrap_or(true)
-    }
-
-    fn poll_value(&mut self) -> Option<f64> {
-        self.new_value_rx.as_mut().and_then(|rx| rx.try_recv().ok())
-    }
-}
-
 impl<AT: Animatable<Value = f64>> Animatable for LowPassIIR<AT> {
-    type State = LowPassIIRState<AT::State>;
+    type State = (AT::State, f64);
     type Value = f64;
 
     fn build(&self, cx: &mut Cx) -> (Id, Self::State, f64) {
-        let (id, state) = cx.with_new_id(|cx| {
-            let (target_id, target_state, target_value) = self.target.build(cx);
-            LowPassIIRState {
-                target_state,
-                target_id,
-                target_value,
-                task: None,
-                runtime: cx.rt.clone(),
-                value: target_value,
-                new_value_rx: None,
-                message_tx: None,
-                waker: cx.waker(),
-            }
-        });
-        let start_value = state.target_value;
-        (id, state, start_value)
+        let (id, state, target_value) = self.target.build(cx);
+        (id, (state, target_value), target_value)
     }
 
     fn rebuild(
@@ -299,55 +208,40 @@ impl<AT: Animatable<Value = f64>> Animatable for LowPassIIR<AT> {
         cx: &mut Cx,
         prev: &Self,
         id: &mut Id,
-        state: &mut Self::State,
+        (state, target_value): &mut Self::State,
         value: &mut f64,
     ) -> ChangeFlags {
         cx.with_id(*id, |cx| {
-            let mut changeflags = self.target.rebuild(
-                cx,
-                &prev.target,
-                &mut state.target_id,
-                &mut state.target_state,
-                &mut state.target_value,
-            );
-            if changeflags.contains(ChangeFlags::UPDATE)
-                && (state.target_value.abs() - value.abs()).abs() > 0.001
-            {
-                state.start_or_wake(self.decay);
+            let _target_changeflags =
+                self.target
+                    .rebuild(cx, &prev.target, id, state, target_value);
+            // TODO set exact value when this threshold is reached?
+            if (*target_value - *value).abs() > 0.0001 {
+                let delta_time = cx
+                    .time_since_last_rebuild()
+                    .unwrap_or(Duration::from_secs_f64(1.0 / 60.0))
+                    .as_secs_f64()
+                    * 100.0; // could be a different factor, and maybe more precisely a frequency based cutoff or something like that
+                let time_adjusted_decay =
+                    1.0 - ((1.0 - self.decay.clamp(0.0, 1.0)).powf(delta_time));
+                *value += time_adjusted_decay * (*target_value - *value);
+                cx.request_frame_update();
+                return ChangeFlags::UPDATE;
+            } else if *value != *target_value {
+                *value = *target_value;
+                return ChangeFlags::UPDATE;
             }
-            if !state.task_finished() {
-                cx.add_pending_async(*id)
-            }
-            if *value != state.value {
-                *value = state.value;
-                changeflags |= ChangeFlags::UPDATE;
-            }
-            changeflags
+            ChangeFlags::empty()
         })
     }
 
     fn message(
         &self,
         id_path: &[Id],
-        state: &mut Self::State,
+        (state, _): &mut Self::State,
         message: Box<dyn std::any::Any>,
     ) -> MessageResult<()> {
-        match id_path {
-            [id, rest_path @ ..] if *id == state.target_id => {
-                self.target
-                    .message(rest_path, &mut state.target_state, message)
-            }
-            [] if message.downcast_ref::<AsyncWake>().is_some() => {
-                let mut message_result = MessageResult::Nop;
-                while let Some(value) = state.poll_value() {
-                    // tracing::info!("new_value: {value}");
-                    state.value = value;
-                    message_result = MessageResult::RequestRebuild;
-                }
-                message_result
-            }
-            [..] => MessageResult::Stale(message),
-        }
+        self.target.message(id_path, state, message)
     }
 }
 
@@ -355,6 +249,7 @@ pub fn low_pass<AT: Animatable<Value = f64>>(decay: f64, target: AT) -> LowPassI
     LowPassIIR { decay, target }
 }
 
+// TODO could be a macro for primitive non-animating values like the following
 impl Animatable for u32 {
     type State = ();
     type Value = u32;

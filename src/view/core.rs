@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
-    sync::{mpsc::SyncSender, Arc},
+    sync::{atomic::AtomicBool, mpsc::SyncSender, Arc},
+    time::Duration,
 };
 
 use futures_task::{ArcWake, Waker};
@@ -20,15 +21,26 @@ xilem_core::generate_rc_view!(std::sync::Arc, View, ViewMarker, Cx, ChangeFlags,
 pub struct Cx {
     id_path: IdPath,
     req_chan: SyncSender<IdPath>,
+    frame_update_notifier: Arc<tokio::sync::Notify>,
+    request_frame_update: Arc<AtomicBool>,
+    pub(crate) time_since_last_render: Option<Duration>, // in seconds TODO Duration instead of f64?
     pub rt: Arc<Runtime>,
     pub(crate) pending_async: HashSet<Id>,
 }
 
 impl Cx {
-    pub(crate) fn new(req_chan: &SyncSender<IdPath>, rt: Arc<Runtime>) -> Self {
+    pub(crate) fn new(
+        req_chan: &SyncSender<IdPath>,
+        rt: Arc<Runtime>,
+        frame_update_notifier: Arc<tokio::sync::Notify>,
+        request_frame_update: Arc<AtomicBool>,
+    ) -> Self {
         Cx {
             id_path: Vec::new(),
             req_chan: req_chan.clone(),
+            frame_update_notifier,
+            request_frame_update,
+            time_since_last_render: None,
             rt,
             pending_async: HashSet::new(),
         }
@@ -85,6 +97,16 @@ impl Cx {
     /// is first.
     pub fn add_pending_async(&mut self, id: Id) {
         self.pending_async.insert(id);
+    }
+
+    pub fn request_frame_update(&self) {
+        self.request_frame_update
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.frame_update_notifier.notify_one();
+    }
+
+    pub(crate) fn time_since_last_rebuild(&self) -> Option<Duration> {
+        self.time_since_last_render
     }
 }
 
