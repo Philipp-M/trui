@@ -25,7 +25,7 @@ pub struct FillMaxSizeState<CS, PS> {
     percent: f64,
 }
 
-impl<T, A, P: Animatable<Value = f64>, V: View<T, A>> View<T, A> for FillMaxSize<V, P, T, A> {
+impl<T, A, P: Animatable<f64>, V: View<T, A>> View<T, A> for FillMaxSize<V, P, T, A> {
     type State = FillMaxSizeState<V::State, P::State>;
 
     type Element = widget::FillMaxSize;
@@ -128,18 +128,18 @@ pub struct FillMaxSizeStyle<P> {
 
 pub trait IntoFillMaxSizeStyle<An>: Sized
 where
-    An: Animatable<Value = f64>,
+    An: Animatable<f64>,
 {
     fn into(self) -> FillMaxSizeStyle<An>;
 }
 
-impl<P: Animatable<Value = f64>> IntoFillMaxSizeStyle<P> for FillMaxSizeStyle<P> {
+impl<P: Animatable<f64>> IntoFillMaxSizeStyle<P> for FillMaxSizeStyle<P> {
     fn into(self) -> FillMaxSizeStyle<P> {
         self
     }
 }
 
-impl<P: Animatable<Value = f64>> IntoFillMaxSizeStyle<P> for P {
+impl<P: Animatable<f64>> IntoFillMaxSizeStyle<P> for P {
     fn into(self) -> FillMaxSizeStyle<P> {
         FillMaxSizeStyle {
             fill: Fill::ALL,

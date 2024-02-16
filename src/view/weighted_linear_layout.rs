@@ -91,9 +91,7 @@ pub struct WeightedLayoutElementState<CS, WS> {
     weight: f64,
 }
 
-impl<T, A, V: View<T, A>, W: Animatable<Value = f64>> View<T, A>
-    for WeightedLayoutElement<V, W, T, A>
-{
+impl<T, A, V: View<T, A>, W: Animatable<f64>> View<T, A> for WeightedLayoutElement<V, W, T, A> {
     type State = WeightedLayoutElementState<V::State, W::State>;
 
     type Element = widget::WeightedLayoutElement;
@@ -186,7 +184,7 @@ impl<T, A, V: View<T, A>, W: Animatable<Value = f64>> View<T, A>
     }
 }
 
-pub fn weighted<T, A, V: View<T, A>, W: Animatable<Value = f64>>(
+pub fn weighted<T, A, V: View<T, A>, W: Animatable<f64>>(
     weight: W,
     content: V,
 ) -> WeightedLayoutElement<V, W, T, A> {

@@ -105,7 +105,7 @@ impl Cx {
         self.frame_update_notifier.notify_one();
     }
 
-    pub(crate) fn time_since_last_rebuild(&self) -> Option<Duration> {
+    pub(crate) fn time_since_last_render(&self) -> Option<Duration> {
         self.time_since_last_render
     }
 }

@@ -89,7 +89,7 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
     ///        .fill_max_size(0.5)
     /// });
     /// ```
-    fn fill_max_size<P: Animatable<Value = f64>, S: IntoFillMaxSizeStyle<P>>(
+    fn fill_max_size<P: Animatable<f64>, S: IntoFillMaxSizeStyle<P>>(
         self,
         style: S,
     ) -> FillMaxSize<Self, P, T, A> {
@@ -102,7 +102,7 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         }
     }
 
-    fn fill_max_width<P: Animatable<Value = f64>>(self, percent: P) -> FillMaxSize<Self, P, T, A> {
+    fn fill_max_width<P: Animatable<f64>>(self, percent: P) -> FillMaxSize<Self, P, T, A> {
         FillMaxSize {
             content: self,
             fill: Fill::WIDTH,
@@ -111,7 +111,7 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         }
     }
 
-    fn fill_max_height<P: Animatable<Value = f64>>(self, percent: P) -> FillMaxSize<Self, P, T, A> {
+    fn fill_max_height<P: Animatable<f64>>(self, percent: P) -> FillMaxSize<Self, P, T, A> {
         FillMaxSize {
             content: self,
             fill: Fill::HEIGHT,
@@ -127,7 +127,7 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         }
     }
 
-    fn weight<W: Animatable<Value = f64>>(self, weight: W) -> WeightedLayoutElement<Self, W, T, A> {
+    fn weight<W: Animatable<f64>>(self, weight: W) -> WeightedLayoutElement<Self, W, T, A> {
         WeightedLayoutElement {
             content: self,
             weight,
