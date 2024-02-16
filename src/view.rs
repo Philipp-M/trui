@@ -59,8 +59,9 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         }
     }
 
+    // TODO these doctests should work without ignore, but need a TestBackend as terminal backend in CI
     /// # Examples
-    /// ```
+    /// ```ignore
     /// use trui::*;
     /// App::new((), move |()| {
     ///    v_stack((
@@ -81,7 +82,7 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
     }
 
     /// # Examples
-    /// ```
+    /// ```ignore
     /// use trui::*;
     /// App::new((), move |()| {
     ///    "Fill half of the parent width/height"
