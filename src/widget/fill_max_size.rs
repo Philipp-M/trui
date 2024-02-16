@@ -48,10 +48,14 @@ impl Widget for FillMaxSize {
     fn layout(&mut self, cx: &mut LayoutCx, bc: &BoxConstraints) -> Size {
         let mut bc = *bc;
         if self.fill.contains(Fill::WIDTH) && bc.is_width_bounded() {
-            bc = bc.constrain_width_to(bc.max().width * self.percent);
+            bc = bc
+                .constrain_width_to(bc.max().width * self.percent)
+                .tighten_max_width();
         }
         if self.fill.contains(Fill::HEIGHT) && bc.is_height_bounded() {
-            bc = bc.constrain_height_to(bc.max().height * self.percent);
+            bc = bc
+                .constrain_height_to(bc.max().height * self.percent)
+                .tighten_max_height();
         }
         self.content.layout(cx, &bc)
     }

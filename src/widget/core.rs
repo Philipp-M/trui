@@ -215,7 +215,8 @@ bitflags! {
         const INIT_FLAGS = Self::REQUEST_UPDATE.bits()
             | Self::REQUEST_LAYOUT.bits()
             | Self::REQUEST_PAINT.bits()
-            | Self::TREE_CHANGED.bits();
+            | Self::TREE_CHANGED.bits()
+            | Self::VIEW_CONTEXT_CHANGED.bits();
     }
 }
 

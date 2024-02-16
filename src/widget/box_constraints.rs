@@ -105,6 +105,20 @@ impl BoxConstraints {
         )
     }
 
+    pub fn tighten_max_height(&self) -> Self {
+        BoxConstraints::new(
+            Size::new(self.min().width, self.max().height),
+            Size::new(self.max().width, self.max().height),
+        )
+    }
+
+    pub fn tighten_max_width(&self) -> Self {
+        BoxConstraints::new(
+            Size::new(self.max().width, self.min().height),
+            Size::new(self.max().width, self.max().height),
+        )
+    }
+
     /// Create a "loose" version of the constraints.
     ///
     /// Make a version with zero minimum size, but the same maximum size.

@@ -309,7 +309,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
                 widget_state: &mut self.root_state,
                 cx_state,
             };
-            let bc = BoxConstraints::tight(self.size);
+            let bc = BoxConstraints::tight(self.size).loosen();
             root_pod.layout(&mut layout_cx, &bc);
             root_pod.set_origin(&mut layout_cx, Point::ORIGIN);
         }
