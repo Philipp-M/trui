@@ -1221,7 +1221,7 @@ checksum = "dff9641d1cd4be8d1a070daf9e3773c5f67e78b4d9d42263020c057706765c04"
 [[package]]
 name = "xilem_core"
 version = "0.1.0"
-source = "git+https://github.com/Philipp-M/xilem.git?branch=personal#bef909a4935fa5a954b929eb46b8969bc645fbab"
+source = "git+https://github.com/Philipp-M/xilem.git?branch=personal#f876cb7b6df3b964e00b6f191b72fe5664407943"
 
 [[package]]
 name = "yaml-rust"
