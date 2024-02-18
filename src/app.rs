@@ -426,6 +426,14 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
 
             let quit = events.iter().any(|e| matches!(e, Event::Quit));
 
+            if let Some(Event::Mouse(mouse)) = events
+                .iter()
+                .rev()
+                .find(|event| matches!(event, Event::Mouse(_)))
+            {
+                self.cursor_pos = Some(Point::new(mouse.column as f64, mouse.row as f64));
+            }
+
             if let Some(root_pod) = self.root_pod.as_mut() {
                 let cx_state = &mut CxState::new(&mut self.events);
 

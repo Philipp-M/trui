@@ -353,8 +353,6 @@ impl Pod {
             // fragment does not change.
             cx.view_context_changed();
             cx.request_paint();
-
-            self.state.flags.insert(PodFlags::VIEW_CONTEXT_CHANGED);
         }
     }
 

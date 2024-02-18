@@ -9,6 +9,7 @@ use super::{BorderKind, Borders, Cx, Styleable, View, ViewMarker};
 use ratatui::style::{Color, Style};
 use xilem_core::MessageResult;
 
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Border<V, T, A> {
     pub(crate) content: V,
     pub(crate) borders: Borders,

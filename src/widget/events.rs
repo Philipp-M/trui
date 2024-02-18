@@ -80,7 +80,7 @@ impl ViewContext {
 
 // TODO separate the widgets etc. into its own module?
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// A message representing a mouse event.
 pub struct MouseEvent {
     pub over_element: bool,

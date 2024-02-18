@@ -40,6 +40,7 @@ pub trait Animatable<V>: Send + Sync {
     ) -> MessageResult<()>; // TODO different type (AnimationMessage?)
 }
 
+#[derive(Clone, Debug)]
 pub struct Lerp<T, R> {
     tweenable: T,
     ratio: R,
@@ -125,6 +126,7 @@ impl<V, T: Tweenable<V>, R: Animatable<f64>> Animatable<V> for Lerp<T, R> {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct LowPassIIR<AT> {
     decay: f64,
     target: AT,
@@ -411,6 +413,7 @@ impl<A: Animatable<f64>> Tweenable<f64> for Range<A> {
 }
 
 // TODO Duration could also be animated, but I'm not sure it's worth the complexity (vs benefit)...
+#[derive(Clone, Debug)]
 pub struct Tween<PS, TW> {
     play_speed: PS,
     tweenable: TW,
@@ -564,15 +567,19 @@ pub mod ease {
         };
     }
 
+    #[derive(Clone, Debug)]
     pub struct Reverse<T>(pub(crate) T);
     impl_tweenable_for_ease_fn!(Reverse<T>, |ratio| 1.0 - ratio);
 
+    #[derive(Clone, Debug)]
     pub struct QuadraticIn<T>(pub(crate) T);
     impl_tweenable_for_ease_fn!(QuadraticIn<T>, |ratio| ratio * ratio);
 
+    #[derive(Clone, Debug)]
     pub struct QuadraticOut<T>(pub(crate) T);
     impl_tweenable_for_ease_fn!(QuadraticOut<T>, |ratio: f64| -(ratio * (ratio - 2.0)));
 
+    #[derive(Clone, Debug)]
     pub struct QuadraticInOut<T>(pub(crate) T);
     impl_tweenable_for_ease_fn!(QuadraticInOut<T>, |ratio: f64| {
         if ratio < 0.5 {
@@ -582,15 +589,17 @@ pub mod ease {
         }
     });
 
+    #[derive(Clone, Debug)]
     pub struct ElasticInOut<EF>(pub(crate) EF);
     impl_tweenable_for_ease_fn!(ElasticInOut<T>, |ratio: f64| {
         use std::f64::consts::TAU;
-        if ratio < 0.5 {
+        (if ratio < 0.5 {
             0.5 * (13.0 * TAU * (2.0 * ratio)).sin() * 2.0_f64.powf(10.0 * ((2.0 * ratio) - 1.0))
         } else {
             0.5 * ((-13.0 * TAU * ((2.0 * ratio - 1.0) + 1.0)).sin()
                 * 2.0_f64.powf(-10.0 * (2.0 * ratio - 1.0))
                 + 2.0)
-        }
+        })
+        .clamp(0.0, 1.0)
     });
 }
