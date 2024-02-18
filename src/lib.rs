@@ -9,5 +9,5 @@ pub use ratatui::style::{Color, Modifier, Style};
 pub use view::*;
 pub use widget::CatchMouseButton;
 
-#[cfg(test)]
+#[cfg(any(test, doctest))]
 mod test_helper;

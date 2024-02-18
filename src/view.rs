@@ -61,14 +61,15 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
 
     // TODO these doctests should work without ignore, but need a TestBackend as terminal backend in CI
     /// # Examples
-    /// ```ignore
-    /// use trui::*;
-    /// App::new((), move |()| {
-    ///    v_stack((
-    ///        "Text with border".border(BorderKind::Rounded),
-    ///        "Other style".border((Borders::VERTICAL, Style::default().fg(Color::Red))),
-    ///    ))
-    /// });
+    /// ```
+    /// # use trui::*;
+    /// # App::new((), move |()| {
+    /// v_stack((
+    ///     "Rounded borders".border(BorderKind::Rounded),
+    ///     "Red borders left and right".border((Borders::VERTICAL, Style::default().fg(Color::Red))),
+    ///     "Top and right but without corners".border(Borders::TOP | Borders::RIGHT),
+    /// ))
+    /// # });
     /// ```
     fn border<S: Into<BorderStyle>>(self, style: S) -> Border<Self, T, A> {
         let style = style.into();
@@ -82,13 +83,13 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
     }
 
     /// # Examples
-    /// ```ignore
-    /// use trui::*;
-    /// App::new((), move |()| {
-    ///    "Fill half of the parent width/height"
-    ///        .border(BorderKind::Rounded)
-    ///        .fill_max_size(0.5)
-    /// });
+    /// ```
+    /// # use trui::*;
+    /// # App::new((), move |()| {
+    /// "Fill half of the parent width/height"
+    ///     .border(BorderKind::Rounded)
+    ///     .fill_max_size(0.5)
+    /// # });
     /// ```
     fn fill_max_size<P: Animatable<f64>, S: IntoFillMaxSizeStyle<P>>(
         self,
