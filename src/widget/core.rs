@@ -6,13 +6,13 @@ use ratatui::Terminal;
 use std::{any::Any, ops::DerefMut};
 use xilem_core::{message, Id};
 
-#[cfg(any(test, doctest))]
+#[cfg(any(test, doctest, feature = "doctests"))]
 use ratatui::backend::TestBackend;
 
-#[cfg(not(any(test, doctest)))]
+#[cfg(not(any(test, doctest, feature = "doctests")))]
 use ratatui::backend::CrosstermBackend;
 
-#[cfg(not(any(test, doctest)))]
+#[cfg(not(any(test, doctest, feature = "doctests")))]
 use std::io::Stdout;
 
 message!(Send);
@@ -55,10 +55,10 @@ pub struct PaintCx<'a, 'b> {
     // TODO mutable? (xilem doesn't do this, but I think there are use cases for this...)
     pub(crate) widget_state: &'a mut WidgetState,
 
-    #[cfg(any(test, doctest))]
+    #[cfg(any(test, doctest, feature = "doctests"))]
     pub(crate) terminal: &'a mut Terminal<TestBackend>,
 
-    #[cfg(not(any(test, doctest)))]
+    #[cfg(not(any(test, doctest, feature = "doctests")))]
     pub(crate) terminal: &'a mut Terminal<CrosstermBackend<Stdout>>,
     // TODO this kinda feels hacky, find a better solution for this issue:
     // this is currently necessary because the most outer styleable widget should be able to override the style for a styleable widget

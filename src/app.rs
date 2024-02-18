@@ -8,7 +8,7 @@ use crate::{
 };
 use anyhow::Result;
 
-#[cfg(not(any(test, doctest)))]
+#[cfg(not(any(test, doctest, feature = "doctests")))]
 use crossterm::{
     cursor,
     event::{DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture},
@@ -23,23 +23,21 @@ use crossterm::event::{poll, read, Event as CxEvent, KeyCode, KeyEvent};
 use directories::ProjectDirs;
 use ratatui::Terminal;
 
-#[cfg(not(any(test, doctest)))]
+#[cfg(not(any(test, doctest, feature = "doctests")))]
 use std::io::stdout;
 
 use std::{
-    collections::HashSet,
-    sync::Arc,
-    time::{Duration, Instant},
+    collections::HashSet, sync::Arc, time::{Duration, Instant}
 };
 use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
 use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
 
-#[cfg(any(test, doctest))]
+#[cfg(any(test, doctest, feature = "doctests"))]
 use ratatui::backend::TestBackend;
 
-#[cfg(not(any(test, doctest)))]
+#[cfg(not(any(test, doctest, feature = "doctests")))]
 use ratatui::backend::CrosstermBackend;
-#[cfg(not(any(test, doctest)))]
+#[cfg(not(any(test, doctest, feature = "doctests")))]
 use std::io::{Stdout, Write};
 
 // TODO less hardcoding and cross-platform support
@@ -64,13 +62,13 @@ pub struct App<T: Send + 'static, V: View<T> + 'static> {
     return_chan: tokio::sync::mpsc::Sender<(V, V::State, HashSet<Id>)>,
     event_chan: tokio::sync::mpsc::Receiver<Event>,
 
-    #[cfg(any(test, doctest))]
+    #[cfg(any(test, doctest, feature = "doctests"))]
     event_tx: tokio::sync::mpsc::Sender<Event>,
 
-    #[cfg(any(test, doctest))]
+    #[cfg(any(test, doctest, feature = "doctests"))]
     terminal: Terminal<TestBackend>,
 
-    #[cfg(not(any(test, doctest)))]
+    #[cfg(not(any(test, doctest, feature = "doctests")))]
     terminal: Terminal<CrosstermBackend<Stdout>>,
     time_since_last_rebuild: Instant,
     size: Size,
@@ -137,10 +135,10 @@ enum UiState {
 
 impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     pub fn new(data: T, app_logic: impl FnMut(&mut T) -> V + Send + 'static) -> Self {
-        #[cfg(not(any(test, doctest)))]
+        #[cfg(not(any(test, doctest, feature = "doctests")))]
         let backend = CrosstermBackend::new(stdout()); // TODO handle errors...
 
-        #[cfg(any(test, doctest))]
+        #[cfg(any(test, doctest, feature = "doctests"))]
         let backend = TestBackend::new(80, 40);
 
         let terminal = Terminal::new(backend).unwrap();
@@ -253,7 +251,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             return_chan: return_tx,
             event_chan: event_rx,
 
-            #[cfg(any(test, doctest))]
+            #[cfg(any(test, doctest, feature = "doctests"))]
             event_tx: event_tx.clone(),
 
             terminal,
@@ -344,17 +342,17 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
 
             root_pod.paint(&mut paint_cx);
 
-            #[cfg(not(any(test, doctest)))]
+            #[cfg(not(any(test, doctest, feature = "doctests")))]
             queue!(stdout(), BeginSynchronizedUpdate)?;
 
             self.terminal.flush()?;
 
-            #[cfg(not(any(test, doctest)))]
+            #[cfg(not(any(test, doctest, feature = "doctests")))]
             execute!(stdout(), EndSynchronizedUpdate)?;
 
             self.terminal.swap_buffers();
 
-            #[cfg(not(any(test, doctest)))]
+            #[cfg(not(any(test, doctest, feature = "doctests")))]
             self.terminal.backend_mut().flush()?;
         }
         Ok(())
@@ -411,7 +409,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
 
     // TODO(zoechi): setup proper configuration for App
     pub fn run_without_logging(mut self) -> Result<()> {
-        #[cfg(not(any(test, doctest)))]
+        #[cfg(not(any(test, doctest, feature = "doctests")))]
         self.init_terminal()?;
 
         self.terminal.clear()?;
@@ -459,7 +457,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         Ok(())
     }
 
-    #[cfg(not(any(test, doctest)))]
+    #[cfg(not(any(test, doctest, feature = "doctests")))]
     fn init_terminal(&self) -> Result<()> {
         enable_raw_mode()?;
         execute!(
@@ -472,7 +470,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         Ok(())
     }
 
-    #[cfg(not(any(test, doctest)))]
+    #[cfg(not(any(test, doctest, feature = "doctests")))]
     fn restore_terminal(&self) -> Result<()> {
         execute!(
             stdout(),
@@ -485,12 +483,12 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         Ok(())
     }
 
-    #[cfg(any(test, doctest))]
+    #[cfg(any(test, doctest, feature = "doctests"))]
     pub fn event_tx(&self) -> tokio::sync::mpsc::Sender<Event> {
         self.event_tx.clone()
     }
 
-    #[cfg(any(test, doctest))]
+    #[cfg(any(test, doctest, feature = "doctests"))]
     pub fn terminal_mut(&mut self) -> &mut Terminal<TestBackend> {
         &mut self.terminal
     }
@@ -499,7 +497,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
 /// Restore the terminal no matter how the app exits
 impl<T: Send + 'static, V: View<T> + 'static> Drop for App<T, V> {
     fn drop(&mut self) {
-        #[cfg(not(any(test, doctest)))]
+        #[cfg(not(any(test, doctest, feature = "doctests")))]
         self.restore_terminal()
             .unwrap_or_else(|e| eprint!("Restoring the terminal failed: {e}"));
     }

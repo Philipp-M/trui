@@ -1,10 +1,10 @@
 mod border;
 mod box_constraints;
 
-#[cfg(not(any(test, doctest)))]
+#[cfg(not(any(test, doctest, feature = "doctests")))]
 mod core;
 
-#[cfg(any(test, doctest))]
+#[cfg(any(test, doctest, feature = "doctests"))]
 pub(crate) mod core;
 
 mod events;

@@ -28,3 +28,7 @@ rand = "0.8"
 
 [lints.clippy]
 dbg_macro = "warn"
+
+[features]
+# INTERNAL USE ONLY, workaround for https://github.com/rust-lang/rust/issues/67295
+doctests = []
