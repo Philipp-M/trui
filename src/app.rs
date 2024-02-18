@@ -27,7 +27,9 @@ use ratatui::Terminal;
 use std::io::stdout;
 
 use std::{
-    collections::HashSet, sync::Arc, time::{Duration, Instant}
+    collections::HashSet,
+    sync::Arc,
+    time::{Duration, Instant},
 };
 use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
 use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
