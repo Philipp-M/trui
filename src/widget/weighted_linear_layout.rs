@@ -1,8 +1,9 @@
 use crate::geometry::{Axis, Size};
 
 use super::{
+    animatables::AnimatableElement,
     core::{EventCx, PaintCx},
-    BoxConstraints, ChangeFlags, LayoutCx, Pod, Widget,
+    BoxConstraints, LayoutCx, LifeCycle, LifeCycleCx, Pod, Widget,
 };
 
 pub struct WeightedLinearLayout {
@@ -13,22 +14,16 @@ pub struct WeightedLinearLayout {
 
 pub struct WeightedLayoutElement {
     pub(crate) content: Pod,
+    pub(crate) weight_animatable: Box<dyn AnimatableElement<f64>>,
     weight: f64,
 }
 
 impl WeightedLayoutElement {
-    pub(crate) fn new(content: impl Widget, weight: f64) -> Self {
+    pub(crate) fn new(content: impl Widget, weight_element: impl AnimatableElement<f64>) -> Self {
         Self {
             content: Pod::new(content),
-            weight,
-        }
-    }
-    pub(crate) fn set_weight(&mut self, weight: f64) -> ChangeFlags {
-        if self.weight != weight {
-            self.weight = weight;
-            ChangeFlags::LAYOUT
-        } else {
-            ChangeFlags::empty()
+            weight_animatable: Box::new(weight_element),
+            weight: 1.0,
         }
     }
 }
@@ -40,8 +35,15 @@ impl Widget for WeightedLayoutElement {
     fn layout(&mut self, cx: &mut LayoutCx, bc: &BoxConstraints) -> Size {
         self.content.layout(cx, bc)
     }
-    fn lifecycle(&mut self, cx: &mut super::LifeCycleCx, event: &super::LifeCycle) {
-        self.content.lifecycle(cx, event)
+    fn lifecycle(&mut self, cx: &mut LifeCycleCx, event: &LifeCycle) {
+        if let LifeCycle::Animate = event {
+            let new_weight = *self.weight_animatable.animate(cx);
+            if new_weight != self.weight {
+                cx.request_layout();
+                self.weight = new_weight;
+            }
+        }
+        self.content.lifecycle(cx, event);
     }
     fn event(&mut self, cx: &mut EventCx, event: &super::Event) {
         self.content.event(cx, event)
@@ -113,7 +115,7 @@ impl Widget for WeightedLinearLayout {
         }
     }
 
-    fn lifecycle(&mut self, cx: &mut super::core::LifeCycleCx, event: &super::LifeCycle) {
+    fn lifecycle(&mut self, cx: &mut super::core::LifeCycleCx, event: &LifeCycle) {
         for child in &mut self.children {
             child.lifecycle(cx, event);
         }

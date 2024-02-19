@@ -22,31 +22,29 @@ pub struct FillMaxSizeState<CS, PS> {
     content_id: Id,
     percent_state: PS,
     percent_id: Id,
-    percent: f64,
+    // percent: f64,
 }
 
 impl<T, A, P: Animatable<f64>, V: View<T, A>> View<T, A> for FillMaxSize<V, P, T, A> {
     type State = FillMaxSizeState<V::State, P::State>;
 
-    type Element = widget::FillMaxSize;
+    type Element = widget::FillMaxSize<P::Element>;
 
     fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Element) {
         let (id, (state, element)) = cx.with_new_id(|cx| {
             let (content_id, content_state, element) = self.content.build(cx);
-            let (percent_id, percent_state, percent) = self.percent.build(cx);
-            tracing::info!("{percent}");
+            let (percent_id, percent_state, percent_element) = self.percent.build(cx);
+            let element = widget::FillMaxSize::new(element, self.fill, percent_element);
             (
                 FillMaxSizeState {
                     content_state,
                     content_id,
                     percent_state,
                     percent_id,
-                    percent,
                 },
                 element,
             )
         });
-        let element = widget::FillMaxSize::new(element, self.fill, state.percent);
         (id, state, element)
     }
 
@@ -61,34 +59,28 @@ impl<T, A, P: Animatable<f64>, V: View<T, A>> View<T, A> for FillMaxSize<V, P, T
         let mut changeflags = ChangeFlags::empty();
         changeflags |= element.set_fill(self.fill);
         cx.with_id(*id, |cx| {
-            let percent_changed = self
-                .percent
-                .rebuild(
-                    cx,
-                    &prev.percent,
-                    &mut state.percent_id,
-                    &mut state.percent_state,
-                    &mut state.percent,
-                )
-                .contains(ChangeFlags::UPDATE);
+            changeflags |= self.percent.rebuild(
+                cx,
+                &prev.percent,
+                &mut state.percent_id,
+                &mut state.percent_state,
+                &mut element.percent,
+            );
 
-            if percent_changed {
-                changeflags |= element.set_percent(state.percent);
-            }
-
-            let element = element
+            let content_el = element
                 .content
                 .downcast_mut()
                 .expect("The margin widget changed its type, this should never happen!");
 
-            changeflags
-                | self.content.rebuild(
-                    cx,
-                    &prev.content,
-                    &mut state.content_id,
-                    &mut state.content_state,
-                    element,
-                )
+            let content_changeflags = self.content.rebuild(
+                cx,
+                &prev.content,
+                &mut state.content_id,
+                &mut state.content_state,
+                content_el,
+            );
+
+            changeflags | element.content.mark(content_changeflags)
         })
     }
 

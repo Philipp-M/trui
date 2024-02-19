@@ -39,12 +39,15 @@ impl<T, A, V: View<T, A>> View<T, A> for Margin<V, T, A> {
         changeflags |= element.set_amount(self.amount);
         changeflags |= element.set_position(self.position);
 
-        let element = element
+        let content_el = element
             .content
             .downcast_mut()
             .expect("The margin widget changed its type, this should never happen!");
 
-        changeflags | self.content.rebuild(cx, &prev.content, id, state, element)
+        let content_changeflags = self
+            .content
+            .rebuild(cx, &prev.content, id, state, content_el);
+        changeflags | element.content.mark(content_changeflags)
     }
 
     fn message(

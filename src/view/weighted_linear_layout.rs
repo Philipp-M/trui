@@ -83,32 +83,20 @@ pub struct WeightedLayoutElement<V, W, T, A> {
 
 impl<T, A, V, W> ViewMarker for WeightedLayoutElement<V, W, T, A> {}
 
-pub struct WeightedLayoutElementState<CS, WS> {
-    content_state: CS,
-    weight_state: WS,
-    content_id: Id,
-    weight_id: Id,
-    weight: f64,
-}
-
 impl<T, A, V: View<T, A>, W: Animatable<f64>> View<T, A> for WeightedLayoutElement<V, W, T, A> {
-    type State = WeightedLayoutElementState<V::State, W::State>;
+    type State = (Id, V::State, Id, W::State);
 
     type Element = widget::WeightedLayoutElement;
 
     fn build(&self, cx: &mut Cx) -> (xilem_core::Id, Self::State, Self::Element) {
         let (id, (state, element)) = cx.with_new_id(|cx| {
             let (content_id, content_state, element) = self.content.build(cx);
-            let (weight_id, weight_state, weight) = self.weight.build(cx);
-            let element = widget::WeightedLayoutElement::new(element, weight);
-            let state = WeightedLayoutElementState {
-                content_state,
-                weight_state,
-                content_id,
-                weight_id,
-                weight,
-            };
-            (state, element)
+            let (weight_id, weight_state, weight_element) = self.weight.build(cx);
+            let element = widget::WeightedLayoutElement::new(element, weight_element);
+            (
+                (content_id, content_state, weight_id, weight_state),
+                element,
+            )
         });
         (id, state, element)
     }
@@ -118,59 +106,49 @@ impl<T, A, V: View<T, A>, W: Animatable<f64>> View<T, A> for WeightedLayoutEleme
         cx: &mut Cx,
         prev: &Self,
         id: &mut xilem_core::Id,
-        state: &mut Self::State,
+        (content_id, content_state, weight_id, weight_state): &mut Self::State,
         element: &mut Self::Element,
     ) -> crate::widget::ChangeFlags {
         cx.with_id(*id, |cx| {
-            let mut changeflags = ChangeFlags::empty();
-            let weight_updated = self
-                .weight
-                .rebuild(
-                    cx,
-                    &prev.weight,
-                    &mut state.weight_id,
-                    &mut state.weight_state,
-                    &mut state.weight,
-                )
-                .contains(ChangeFlags::UPDATE);
+            let changeflags = self.weight.rebuild(
+                cx,
+                &prev.weight,
+                weight_id,
+                weight_state,
+                element
+                    .weight_animatable
+                    .as_any_mut()
+                    .downcast_mut()
+                    .unwrap(),
+            );
 
-            if weight_updated {
-                changeflags |= element.set_weight(state.weight);
-            }
-
-            let element = element
+            let content_el = element
                 .content
                 .downcast_mut()
                 .expect("The weighted widget changed its type, this should never happen!");
 
-            changeflags
-                | self.content.rebuild(
-                    cx,
-                    &prev.content,
-                    &mut state.content_id,
-                    &mut state.content_state,
-                    element,
-                )
+            let content_changeflags =
+                self.content
+                    .rebuild(cx, &prev.content, content_id, content_state, content_el);
+
+            changeflags | element.content.mark(content_changeflags)
         })
     }
 
     fn message(
         &self,
         id_path: &[xilem_core::Id],
-        state: &mut Self::State,
+        (content_id, content_state, weight_id, weight_state): &mut Self::State,
         message: Box<dyn std::any::Any>,
         app_state: &mut T,
     ) -> MessageResult<A> {
         match id_path {
-            [id, rest_path @ ..] if *id == state.content_id => {
+            [id, rest_path @ ..] if *id == *content_id => {
                 self.content
-                    .message(rest_path, &mut state.content_state, message, app_state)
+                    .message(rest_path, content_state, message, app_state)
             }
-            [id, rest_path @ ..] if *id == state.weight_id => {
-                match self
-                    .weight
-                    .message(rest_path, &mut state.weight_state, message)
-                {
+            [id, rest_path @ ..] if *id == *weight_id => {
+                match self.weight.message(rest_path, weight_state, message) {
                     MessageResult::Action(_) | MessageResult::RequestRebuild => {
                         MessageResult::RequestRebuild
                     }
@@ -180,7 +158,6 @@ impl<T, A, V: View<T, A>, W: Animatable<f64>> View<T, A> for WeightedLayoutEleme
             }
             [..] => MessageResult::Stale(message),
         }
-        // self.content.message(id_path, state, message, app_state)
     }
 }
 

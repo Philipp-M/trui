@@ -1,4 +1,4 @@
-mod animatable_value;
+mod animatables;
 mod border;
 mod common;
 mod core;
@@ -18,7 +18,7 @@ pub use xilem_core::{Id, IdPath, VecSplice};
 
 // TODO do this via a prelude instead (and possibly not wildcard export)
 pub use self::core::*;
-pub use animatable_value::*;
+pub use animatables::*;
 pub use border::*;
 pub use common::*;
 pub use defer::*;
@@ -59,7 +59,6 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
         }
     }
 
-    // TODO these doctests should work without ignore, but need a TestBackend as terminal backend in CI
     /// # Examples
     /// ```
     /// # use trui::*;

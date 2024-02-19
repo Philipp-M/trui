@@ -44,12 +44,16 @@ impl<T, A, V: View<T, A>> View<T, A> for Border<V, T, A> {
         changeflags |= element.set_style(self.style);
         changeflags |= element.set_kind(self.kind);
 
-        let element = element
+        let content_el = element
             .content
             .downcast_mut()
             .expect("The border content widget changed its type, this should never happen!");
 
-        changeflags | self.content.rebuild(cx, &prev.content, id, state, element)
+        let content_changeflags = self
+            .content
+            .rebuild(cx, &prev.content, id, state, content_el);
+        let _ = element.content.mark(content_changeflags);
+        changeflags | content_changeflags
     }
 
     fn message(

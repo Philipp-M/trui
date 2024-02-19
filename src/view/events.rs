@@ -420,8 +420,8 @@ where
         (state, child_id, (eh_id, eh_state)): &mut Self::State,
         element: &mut Self::Element,
     ) -> ChangeFlags {
-        let changeflags = cx.with_id(*id, |cx| {
-            self.view.rebuild(
+        cx.with_id(*id, |cx| {
+            let content_changeflags = self.view.rebuild(
                 cx,
                 &prev.view,
                 child_id,
@@ -430,10 +430,11 @@ where
                     "The style on pressed content widget changed its type,\
                      this should never happen!",
                 ),
-            )
-        });
+            );
 
-        changeflags | self.event_handler.rebuild(cx, eh_id, eh_state)
+            element.element.mark(content_changeflags)
+                | self.event_handler.rebuild(cx, eh_id, eh_state)
+        })
     }
 
     fn message(
@@ -538,14 +539,14 @@ where
             element.style = self.style;
             changeflags |= ChangeFlags::PAINT;
         }
-        changeflags |= self.view.rebuild(
+        let content_changeflags = self.view.rebuild(
             cx,
             &prev.view,
             id,
             state,
             element.element.downcast_mut().unwrap(),
         );
-        changeflags
+        element.element.mark(content_changeflags) | changeflags
     }
 
     fn message(
@@ -593,8 +594,8 @@ where
             element.style = self.style;
             changeflags |= ChangeFlags::PAINT;
         }
-        changeflags |= cx.with_id(*id, |cx| {
-            self.view.rebuild(
+        changeflags | cx.with_id(*id, |cx| {
+            let element_changeflags = self.view.rebuild(
                 cx,
                 &prev.view,
                 child_id,
@@ -602,9 +603,9 @@ where
                 element.element.downcast_mut().expect(
                     "The style on pressed content widget changed its type, this should never happen!",
                 ),
-            )
-        });
-        changeflags
+            );
+            element.element.mark(element_changeflags)
+        })
     }
 
     fn message(
@@ -662,17 +663,17 @@ macro_rules! event_views {
                 (state, child_id, (eh_id, eh_state)): &mut Self::State,
                 element: &mut Self::Element,
             ) -> ChangeFlags {
-                let changeflags = cx.with_id(*id, |cx| {
-                    self.view.rebuild(
+                cx.with_id(*id, |cx| {
+                    let element_changeflags = self.view.rebuild(
                         cx,
                         &prev.view,
                         child_id,
                         state,
                         element.element.downcast_mut().unwrap(),
-                    )
-                });
+                    );
 
-                changeflags | self.event_handler.rebuild(cx, eh_id, eh_state)
+                    element.element.mark(element_changeflags) | self.event_handler.rebuild(cx, eh_id, eh_state)
+                })
             }
 
             fn message(
@@ -778,8 +779,8 @@ where
         (state, child_id, (eh_id, eh_state)): &mut Self::State,
         element: &mut Self::Element,
     ) -> ChangeFlags {
-        let changeflags = cx.with_id(*id, |cx| {
-            self.view.rebuild(
+        cx.with_id(*id, |cx| {
+            let element_changeflags = self.view.rebuild(
                 cx,
                 &prev.view,
                 child_id,
@@ -788,10 +789,10 @@ where
                     "The style on pressed content widget changed its type,\
                      this should never happen!",
                 ),
-            )
-        });
-
-        changeflags | self.event_handler.rebuild(cx, eh_id, eh_state)
+            );
+            element.element.mark(element_changeflags)
+                | self.event_handler.rebuild(cx, eh_id, eh_state)
+        })
     }
 
     fn message(
