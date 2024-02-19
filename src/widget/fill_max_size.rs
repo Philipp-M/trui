@@ -1,22 +1,25 @@
 use crate::{geometry::Size, Fill};
 
 use super::{
+    animatables::AnimatableElement,
     core::{EventCx, LifeCycleCx, PaintCx},
     BoxConstraints, ChangeFlags, Event, LayoutCx, LifeCycle, Pod, Widget,
 };
 
-pub struct FillMaxSize {
+pub struct FillMaxSize<P> {
     pub(crate) content: Pod,
     fill: Fill,
-    percent: f64,
+    pub(crate) percent: P,
+    percent_value: f64,
 }
 
-impl FillMaxSize {
-    pub(crate) fn new(content: impl Widget, fill: Fill, percent: f64) -> Self {
+impl<P> FillMaxSize<P> {
+    pub(crate) fn new(content: impl Widget, fill: Fill, percent: P) -> Self {
         FillMaxSize {
             content: Pod::new(content),
             fill,
             percent,
+            percent_value: 1.0,
         }
     }
 
@@ -28,19 +31,9 @@ impl FillMaxSize {
             ChangeFlags::empty()
         }
     }
-
-    pub(crate) fn set_percent(&mut self, percent: f64) -> ChangeFlags {
-        let percent = percent.clamp(0.0, 1.0);
-        if self.percent != percent {
-            self.percent = percent;
-            ChangeFlags::LAYOUT
-        } else {
-            ChangeFlags::empty()
-        }
-    }
 }
 
-impl Widget for FillMaxSize {
+impl<P: AnimatableElement<f64> + 'static> Widget for FillMaxSize<P> {
     fn paint(&mut self, cx: &mut PaintCx) {
         self.content.paint(cx)
     }
@@ -49,12 +42,12 @@ impl Widget for FillMaxSize {
         let mut bc = *bc;
         if self.fill.contains(Fill::WIDTH) && bc.is_width_bounded() {
             bc = bc
-                .constrain_width_to(bc.max().width * self.percent)
+                .constrain_width_to(bc.max().width * self.percent_value)
                 .tighten_max_width();
         }
         if self.fill.contains(Fill::HEIGHT) && bc.is_height_bounded() {
             bc = bc
-                .constrain_height_to(bc.max().height * self.percent)
+                .constrain_height_to(bc.max().height * self.percent_value)
                 .tighten_max_height();
         }
         self.content.layout(cx, &bc)
@@ -65,6 +58,13 @@ impl Widget for FillMaxSize {
     }
 
     fn lifecycle(&mut self, cx: &mut LifeCycleCx, event: &LifeCycle) {
-        self.content.lifecycle(cx, event)
+        if let LifeCycle::Animate = event {
+            let new_percent_value = *self.percent.animate(cx);
+            if new_percent_value != self.percent_value {
+                cx.request_layout();
+                self.percent_value = new_percent_value;
+            }
+        }
+        self.content.lifecycle(cx, event);
     }
 }

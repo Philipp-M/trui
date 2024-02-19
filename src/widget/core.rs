@@ -3,7 +3,7 @@ use crate::geometry::{Point, Rect, Size};
 use bitflags::bitflags;
 use crossterm::event::MouseEventKind;
 use ratatui::Terminal;
-use std::{any::Any, ops::DerefMut};
+use std::{any::Any, ops::DerefMut, time::Duration};
 use xilem_core::{message, Id};
 
 #[cfg(any(test, doctest, feature = "doctests"))]
@@ -20,11 +20,15 @@ message!(Send);
 /// Static state that is shared between most contexts.
 pub struct CxState<'a> {
     messages: &'a mut Vec<Message>,
+    pub(crate) time_since_last_render: Duration, // in seconds TODO Duration instead of f64?
 }
 
 impl<'a> CxState<'a> {
-    pub fn new(messages: &'a mut Vec<Message>) -> Self {
-        Self { messages }
+    pub fn new(messages: &'a mut Vec<Message>, time_since_last_render: Duration) -> Self {
+        Self {
+            messages,
+            time_since_last_render,
+        }
     }
 }
 
@@ -127,6 +131,23 @@ impl_context_method!(
             self.widget_state.flags |= PodFlags::REQUEST_PAINT;
         }
 
+        /// Requests a call to [`paint`] for this widget.
+        ///
+        /// [`paint`]: super::Widget::paint
+        pub fn request_layout(&mut self) {
+            self.widget_state.flags |= PodFlags::REQUEST_LAYOUT;
+        }
+
+        /// Requests an animation update for this widget.
+        /// This effectively means currently a request for a new render/frame
+        pub fn request_animation_update(&mut self) {
+            self.widget_state.flags |= PodFlags::REQUEST_ANIMATION;
+        }
+
+        pub fn time_since_last_render(&self) -> Duration {
+            self.cx_state.time_since_last_render
+        }
+
         /// Notify Trui that this widgets view context changed.
         ///
         /// A [`LifeCycle::ViewContextChanged`] event will be scheduled.
@@ -184,6 +205,7 @@ bitflags! {
         const LAYOUT = 2;
         const PAINT = 8;
         const TREE = 0x10;
+        const ANIMATION = 0x20;
     }
 }
 
@@ -195,6 +217,7 @@ bitflags! {
         const REQUEST_UPDATE = ChangeFlags::UPDATE.bits() as _;
         const REQUEST_LAYOUT = ChangeFlags::LAYOUT.bits() as _;
         const REQUEST_PAINT = ChangeFlags::PAINT.bits() as _;
+        const REQUEST_ANIMATION = ChangeFlags::ANIMATION.bits() as _;
         const TREE_CHANGED = ChangeFlags::TREE.bits() as _;
 
         // Everything else uses bitmasks greater than the max value of ChangeFlags: mask >= 0x100
@@ -209,12 +232,14 @@ bitflags! {
         const UPWARD_FLAGS = Self::REQUEST_UPDATE.bits()
             | Self::REQUEST_LAYOUT.bits()
             | Self::REQUEST_PAINT.bits()
+            | Self::REQUEST_ANIMATION.bits()
             | Self::HAS_ACTIVE.bits()
             | Self::TREE_CHANGED.bits()
             | Self::VIEW_CONTEXT_CHANGED.bits();
         const INIT_FLAGS = Self::REQUEST_UPDATE.bits()
             | Self::REQUEST_LAYOUT.bits()
             | Self::REQUEST_PAINT.bits()
+            | Self::REQUEST_ANIMATION.bits()
             | Self::TREE_CHANGED.bits()
             | Self::VIEW_CONTEXT_CHANGED.bits();
     }
@@ -537,12 +562,21 @@ impl Pod {
                     false
                 }
             }
+            LifeCycle::Animate => {
+                if self.state.flags.contains(PodFlags::REQUEST_ANIMATION) {
+                    self.state.flags.remove(PodFlags::REQUEST_ANIMATION);
+                    true
+                } else {
+                    false
+                }
+            } // TODO fine-grained
         };
-        let mut child_cx = LifeCycleCx {
-            cx_state: cx.cx_state,
-            widget_state: &mut self.state,
-        };
+
         if recurse {
+            let mut child_cx = LifeCycleCx {
+                cx_state: cx.cx_state,
+                widget_state: &mut self.state,
+            };
             self.widget
                 .lifecycle(&mut child_cx, modified_event.as_ref().unwrap_or(event));
             cx.widget_state.merge_up(&mut self.state);

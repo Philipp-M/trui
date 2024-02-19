@@ -72,8 +72,8 @@ pub struct App<T: Send + 'static, V: View<T> + 'static> {
 
     #[cfg(not(any(test, doctest, feature = "doctests")))]
     terminal: Terminal<CrosstermBackend<Stdout>>,
-    time_since_last_rebuild: Instant,
     size: Size,
+    request_render_notifier: Arc<tokio::sync::Notify>,
     cursor_pos: Option<Point>,
     events: Vec<Message>,
     root_state: WidgetState,
@@ -170,25 +170,20 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             }
         });
 
-        let request_frame_update = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let frame_update_notifier = Arc::new(tokio::sync::Notify::new());
+        let request_render_notifier = Arc::new(tokio::sync::Notify::new());
 
-        let update_requested_clone = Arc::clone(&request_frame_update);
-        let frame_update_notifier_clone = Arc::clone(&frame_update_notifier);
+        let request_render_notifier_clone = Arc::clone(&request_render_notifier);
         let event_tx_clone = event_tx.clone();
 
         // Until we have a solid way to sync with the screen refresh rate, do an update every 1/60 secs when it is requested
         rt.spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs_f64(1.0 / 60.0));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
             loop {
-                frame_update_notifier_clone.notified().await;
+                request_render_notifier_clone.notified().await;
                 interval.tick().await;
-
-                if update_requested_clone.swap(false, std::sync::atomic::Ordering::Relaxed) {
-                    let _ = event_tx_clone.send(Event::Wake).await;
-                }
-
-                if event_tx_clone.is_closed() {
+                if event_tx_clone.send(Event::Wake).await.is_err() {
                     break;
                 }
             }
@@ -245,7 +240,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             app_task.run().await;
         });
 
-        let cx = Cx::new(&wake_tx, rt, frame_update_notifier, request_frame_update);
+        let cx = Cx::new(&wake_tx, rt);
 
         App {
             req_chan: message_tx,
@@ -264,7 +259,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             id: None,
             root_state: WidgetState::new(),
             events: Vec::new(),
-            time_since_last_rebuild: Instant::now(),
+            request_render_notifier,
         }
     }
 
@@ -276,14 +271,14 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     }
 
     /// Run the app logic and update the widget tree.
+    /// Returns whether a rerender should be scheduled
     #[tracing::instrument(skip(self))]
-    fn render(&mut self) -> Result<()> {
+    fn render(&mut self, time_since_last_render: Duration) -> Result<bool> {
         if self.build_widget_tree(false) {
             self.build_widget_tree(true);
         }
         let root_pod = self.root_pod.as_mut().unwrap();
-
-        let cx_state = &mut CxState::new(&mut self.events);
+        let cx_state = &mut CxState::new(&mut self.events, time_since_last_render);
 
         // TODO via event (Event::Resize)?
         self.terminal.autoresize()?;
@@ -294,7 +289,16 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             width: width as f64,
             height: height as f64,
         };
-        tracing::error!("current size: {term_size}");
+
+        if root_pod.state.flags.contains(PodFlags::REQUEST_ANIMATION) {
+            root_pod.lifecycle(
+                &mut LifeCycleCx {
+                    cx_state,
+                    widget_state: &mut self.root_state,
+                },
+                &LifeCycle::Animate,
+            );
+        }
 
         let needs_layout_recomputation = root_pod
             .state
@@ -357,7 +361,9 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             #[cfg(not(any(test, doctest, feature = "doctests")))]
             self.terminal.backend_mut().flush()?;
         }
-        Ok(())
+
+        // currently only an animation update can request a rerender
+        Ok(root_pod.state.flags.contains(PodFlags::REQUEST_ANIMATION))
     }
 
     /// Run one pass of app logic.
@@ -369,8 +375,6 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         if let Some(response) = self.render_response_chan.blocking_recv() {
             let state = if let Some(widget) = self.root_pod.as_mut() {
                 let mut state = response.state.unwrap();
-                self.cx.time_since_last_render = Some(self.time_since_last_rebuild.elapsed());
-                self.time_since_last_rebuild = Instant::now();
                 let changes = response.view.rebuild(
                     &mut self.cx,
                     response.prev.as_ref().unwrap(),
@@ -385,8 +389,6 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
                 assert!(self.cx.is_empty(), "id path imbalance on rebuild");
                 state
             } else {
-                self.cx.time_since_last_render = None;
-                self.time_since_last_rebuild = Instant::now();
                 let (id, state, widget) = response.view.build(&mut self.cx);
                 assert!(self.cx.is_empty(), "id path imbalance on build");
                 self.root_pod = Some(Pod::new(widget));
@@ -417,6 +419,8 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         self.terminal.clear()?;
 
         let main_loop_tracing_span = tracing::debug_span!("main loop");
+        let mut time_of_last_render = Instant::now();
+        let mut time_since_last_render = Duration::ZERO;
         while let Some(event) = self.event_chan.blocking_recv() {
             let mut events = vec![event];
             // batch events
@@ -435,7 +439,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             }
 
             if let Some(root_pod) = self.root_pod.as_mut() {
-                let cx_state = &mut CxState::new(&mut self.events);
+                let cx_state = &mut CxState::new(&mut self.events, time_since_last_render);
 
                 let mut cx = EventCx {
                     is_handled: false,
@@ -449,7 +453,12 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             }
             self.send_events();
 
-            self.render()?;
+            let rerender_requested = self.render(time_since_last_render)?;
+            if rerender_requested {
+                self.request_render_notifier.notify_one();
+            }
+            time_since_last_render = time_of_last_render.elapsed();
+            time_of_last_render = Instant::now();
             if quit {
                 break;
             }

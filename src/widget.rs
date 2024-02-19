@@ -7,6 +7,7 @@ mod core;
 #[cfg(any(test, doctest, feature = "doctests"))]
 pub(crate) mod core;
 
+pub(crate) mod animatables;
 mod events;
 mod fill_max_size;
 mod linear_layout;

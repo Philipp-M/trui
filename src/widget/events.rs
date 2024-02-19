@@ -32,6 +32,7 @@ pub enum LifeCycle {
     HotChanged(bool),
     ViewContextChanged(ViewContext),
     TreeUpdate,
+    Animate,
 }
 
 #[derive(Debug)]
