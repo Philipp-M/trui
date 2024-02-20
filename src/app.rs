@@ -420,7 +420,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
 
         let main_loop_tracing_span = tracing::debug_span!("main loop");
         let mut time_of_last_render = Instant::now();
-        let mut time_since_last_render = Duration::ZERO;
+        let mut time_since_last_render_request = Duration::ZERO;
         while let Some(event) = self.event_chan.blocking_recv() {
             let mut events = vec![event];
             // batch events
@@ -439,7 +439,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             }
 
             if let Some(root_pod) = self.root_pod.as_mut() {
-                let cx_state = &mut CxState::new(&mut self.events, time_since_last_render);
+                let cx_state = &mut CxState::new(&mut self.events, time_since_last_render_request);
 
                 let mut cx = EventCx {
                     is_handled: false,
@@ -453,12 +453,17 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             }
             self.send_events();
 
-            let rerender_requested = self.render(time_since_last_render)?;
+            let rerender_requested = self.render(time_since_last_render_request)?;
+            // TODO this is a workaround (I consider this at least as that) for getting animations right
+            // There's likely a cleaner solution
             if rerender_requested {
                 self.request_render_notifier.notify_one();
+                time_since_last_render_request = time_of_last_render.elapsed();
+            } else {
+                time_since_last_render_request = Duration::ZERO;
             }
-            time_since_last_render = time_of_last_render.elapsed();
             time_of_last_render = Instant::now();
+
             if quit {
                 break;
             }

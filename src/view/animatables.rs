@@ -9,10 +9,10 @@ use crate::{
 
 // This is basically a View trait without <T, A> (but this may be subject to change, to allow animations based on the AppState (via e.g. event callbacks))
 pub trait Animatable<V>: Send + Sync {
-    /// Associated state for the view.
+    /// Associated state for the animatable.
     type State: Send;
 
-    /// Associated state for the view.
+    /// Associated state for the animatable.
     type Element: AnimatableElement<V>;
 
     /// Build the associated widget and initialize state.
@@ -33,7 +33,7 @@ pub trait Animatable<V>: Send + Sync {
     /// Propagate a message.
     ///
     /// Handle a message, propagating to children if needed. Here, `id_path` is a slice
-    /// of ids beginning at a child of this view.
+    /// of ids beginning at a child of this animatable.
     fn message(
         &self,
         id_path: &[Id],
@@ -58,16 +58,15 @@ impl<V, T: Tweenable<V>, R: Animatable<f64>> Animatable<V> for Lerp<T, R> {
     type Element = widget::animatables::Lerp<T::Element, R::Element>;
 
     fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Element) {
-        let (id, (state, el)) = cx.with_new_id(|cx| {
+        let (id, (state, element)) = cx.with_new_id(|cx| {
             let (ratio_id, ratio_state, ratio_element) = self.ratio.build(cx);
             let (tweenable_id, tweenable_state, tweenable_element) = self.tweenable.build(cx);
-            let element = widget::animatables::Lerp::new(tweenable_element, ratio_element);
             (
                 (tweenable_id, tweenable_state, ratio_id, ratio_state),
-                element,
+                widget::animatables::Lerp::new(tweenable_element, ratio_element),
             )
         });
-        (id, state, el)
+        (id, state, element)
     }
 
     fn rebuild(
@@ -236,7 +235,7 @@ pub trait Tweenable<V>: Send + Sync {
     /// Build the associated widget and initialize state.
     fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Element);
 
-    /// Update the associated value.
+    /// Update the associated element.
     ///
     /// Returns an indication of what, if anything, has changed.
     fn rebuild(
@@ -245,7 +244,7 @@ pub trait Tweenable<V>: Send + Sync {
         prev: &Self,
         id: &mut Id,
         state: &mut Self::State,
-        value: &mut Self::Element,
+        element: &mut Self::Element,
     ) -> ChangeFlags;
 
     /// Propagate a message.

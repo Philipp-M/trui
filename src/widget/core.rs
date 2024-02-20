@@ -20,14 +20,14 @@ message!(Send);
 /// Static state that is shared between most contexts.
 pub struct CxState<'a> {
     messages: &'a mut Vec<Message>,
-    pub(crate) time_since_last_render: Duration, // in seconds TODO Duration instead of f64?
+    pub(crate) time_since_last_render_request: Duration, // in seconds TODO Duration instead of f64?
 }
 
 impl<'a> CxState<'a> {
-    pub fn new(messages: &'a mut Vec<Message>, time_since_last_render: Duration) -> Self {
+    pub fn new(messages: &'a mut Vec<Message>, time_since_last_render_request: Duration) -> Self {
         Self {
             messages,
-            time_since_last_render,
+            time_since_last_render_request,
         }
     }
 }
@@ -144,8 +144,8 @@ impl_context_method!(
             self.widget_state.flags |= PodFlags::REQUEST_ANIMATION;
         }
 
-        pub fn time_since_last_render(&self) -> Duration {
-            self.cx_state.time_since_last_render
+        pub fn time_since_last_render_request(&self) -> Duration {
+            self.cx_state.time_since_last_render_request
         }
 
         /// Notify Trui that this widgets view context changed.

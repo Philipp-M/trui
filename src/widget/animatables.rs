@@ -45,8 +45,6 @@ macro_rules! impl_animatable_for_primitive {
 }
 
 // All builtin number types
-impl_animatable_for_primitive!(f64);
-impl_animatable_for_primitive!(f32);
 impl_animatable_for_primitive!(i8);
 impl_animatable_for_primitive!(u8);
 impl_animatable_for_primitive!(i16);
@@ -59,6 +57,9 @@ impl_animatable_for_primitive!(i128);
 impl_animatable_for_primitive!(u128);
 impl_animatable_for_primitive!(isize);
 impl_animatable_for_primitive!(usize);
+
+impl_animatable_for_primitive!(f32);
+impl_animatable_for_primitive!(f64);
 
 #[derive(Clone, Debug)]
 pub struct LowPassIIR<AT, V> {
@@ -91,7 +92,7 @@ impl<AT: AnimatableElement<f64>> AnimatableElement<f64> for LowPassIIR<AT, f64> 
         let target_value = self.target.animate(cx);
         if let Some(value) = &mut self.value {
             if (*target_value - *value).abs() > 0.0001 {
-                let delta_time = cx.time_since_last_render().as_secs_f64() * 100.0; // could be a different factor, and maybe more precisely a frequency based cutoff or something like that
+                let delta_time = cx.time_since_last_render_request().as_secs_f64() * 100.0; // could be a different factor, and maybe more precisely a frequency based cutoff or something like that
                 let time_adjusted_decay =
                     1.0 - ((1.0 - self.decay.clamp(0.0, 1.0)).powf(delta_time));
                 *value += time_adjusted_decay * (*target_value - *value);
@@ -154,7 +155,7 @@ impl<V: 'static, PS: AnimatableElement<f64>, TW: TweenableElement<V>> Animatable
         let duration_as_secs = self.duration.as_secs_f64();
         let current_time_as_secs = self.current_time.as_secs_f64();
         let new_time = (current_time_as_secs
-            + *play_speed * cx.time_since_last_render().as_secs_f64())
+            + *play_speed * cx.time_since_last_render_request().as_secs_f64())
         .clamp(0.0, duration_as_secs);
         // avoid division by zero
         let ratio = if duration_as_secs == 0.0 {
