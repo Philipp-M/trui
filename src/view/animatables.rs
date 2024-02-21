@@ -3,11 +3,7 @@ use std::{ops::Range, time::Duration};
 use xilem_core::{Id, MessageResult};
 
 use crate::{
-    widget::{
-        self,
-        animatables::{AnimatableElement, AnyTweenableElement},
-        ChangeFlags,
-    },
+    widget::{self, animatables::AnimatableElement, ChangeFlags},
     Cx,
 };
 
