@@ -3,7 +3,11 @@ use std::{ops::Range, time::Duration};
 use xilem_core::{Id, MessageResult};
 
 use crate::{
-    widget::{self, animatables::AnimatableElement, ChangeFlags},
+    widget::{
+        self,
+        animatables::{AnimatableElement, AnyTweenableElement},
+        ChangeFlags,
+    },
     Cx,
 };
 
@@ -258,15 +262,25 @@ pub trait Tweenable<V>: Send + Sync {
         message: Box<dyn std::any::Any>,
     ) -> MessageResult<()>;
 
-    fn tween<PS>(self, duration: Duration, play_speed: PS) -> Tween<PS, Self>
+    /// Overrides the duration of any tweenable it composes
+    fn duration(self, duration: Duration) -> WithDuration<Self>
+    where
+        Self: Sized,
+    {
+        WithDuration {
+            tweenable: self,
+            duration,
+        }
+    }
+
+    fn play<PS>(self, play_speed: PS) -> PlayTween<PS, Self>
     where
         Self: Sized,
         PS: Animatable<f64>,
     {
-        Tween {
+        PlayTween {
             play_speed,
             tweenable: self,
-            duration,
         }
     }
 
@@ -372,15 +386,127 @@ impl<A: Animatable<f64>> Tweenable<f64> for Range<A> {
     }
 }
 
-// TODO Duration could also be animated, but I'm not sure it's worth the complexity (vs benefit)...
-#[derive(Clone, Debug)]
-pub struct Tween<PS, TW> {
-    play_speed: PS,
-    tweenable: TW,
-    duration: Duration,
+// Sequence of multiple tweenables, not sure yet whether this should be done via tuples (as that syntax is already used by ViewSequences)
+impl<V: 'static, T1: Tweenable<V>, T2: Tweenable<V>> Tweenable<V> for (T1, T2) {
+    type State = ((Id, T1::State), (Id, T2::State));
+
+    type Element = widget::animatables::Sequence<V>;
+
+    fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Element) {
+        let (id, (state, element)) = cx.with_new_id(|cx| {
+            let (id0, state0, element0) = self.0.build(cx);
+            let (id1, state1, element1) = self.1.build(cx);
+            let element =
+                widget::animatables::Sequence::new(vec![Box::new(element0), Box::new(element1)]);
+            (((id0, state0), (id1, state1)), element)
+        });
+        (id, state, element)
+    }
+
+    fn rebuild(
+        &self,
+        cx: &mut Cx,
+        prev: &Self,
+        id: &mut Id,
+        ((id0, state0), (id1, state1)): &mut Self::State,
+        element: &mut Self::Element,
+    ) -> ChangeFlags {
+        cx.with_id(*id, |cx| {
+            self.0.rebuild(
+                cx,
+                &prev.0,
+                id0,
+                state0,
+                (*element.tweenables[0])
+                    .as_any_mut()
+                    .downcast_mut()
+                    .unwrap(),
+            ) | self.1.rebuild(
+                cx,
+                &prev.1,
+                id1,
+                state1,
+                (*element.tweenables[1])
+                    .as_any_mut()
+                    .downcast_mut()
+                    .unwrap(),
+            )
+        })
+    }
+
+    fn message(
+        &self,
+        id_path: &[Id],
+        ((id0, state0), (id1, state1)): &mut Self::State,
+        message: Box<dyn std::any::Any>,
+    ) -> MessageResult<()> {
+        match id_path {
+            [id, rest_path @ ..] if id == id0 => self.0.message(rest_path, state0, message),
+            [id, rest_path @ ..] if id == id1 => self.1.message(rest_path, state1, message),
+            [..] => MessageResult::Stale(message),
+        }
+    }
 }
 
-impl<V, PS, TW> Animatable<V> for Tween<PS, TW>
+// TODO should this also be used within other animatables directly (not just Tweenable)?
+// TODO Duration could be animated too
+/// Overrides the duration of any tweenable it composes
+pub struct WithDuration<T> {
+    pub(crate) tweenable: T,
+    pub(crate) duration: Duration,
+}
+
+impl<V, T: Tweenable<V>> Tweenable<V> for WithDuration<T> {
+    type State = T::State;
+
+    type Element = widget::animatables::WithDuration<T::Element>;
+
+    fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Element) {
+        let (id, state, element) = self.tweenable.build(cx);
+        (
+            id,
+            state,
+            widget::animatables::WithDuration::new(element, self.duration),
+        )
+    }
+
+    fn rebuild(
+        &self,
+        cx: &mut Cx,
+        prev: &Self,
+        id: &mut Id,
+        state: &mut Self::State,
+        element: &mut Self::Element,
+    ) -> ChangeFlags {
+        let mut changeflags = ChangeFlags::empty();
+        if self.duration != prev.duration {
+            element.duration = self.duration;
+            changeflags |= ChangeFlags::ANIMATION;
+        }
+        changeflags
+            | self
+                .tweenable
+                .rebuild(cx, &prev.tweenable, id, state, &mut element.tweenable)
+    }
+
+    fn message(
+        &self,
+        id_path: &[Id],
+        state: &mut Self::State,
+        message: Box<dyn std::any::Any>,
+    ) -> MessageResult<()> {
+        self.tweenable.message(id_path, state, message)
+    }
+}
+
+// TODO Duration could also be animated, but I'm not sure it's worth the complexity (vs benefit)...
+#[derive(Clone, Debug)]
+pub struct PlayTween<PS, TW> {
+    play_speed: PS,
+    tweenable: TW,
+}
+
+impl<V, PS, TW> Animatable<V> for PlayTween<PS, TW>
 where
     V: 'static,
     PS: Animatable<f64>,
@@ -388,18 +514,15 @@ where
 {
     type State = (Id, PS::State, Id, TW::State);
 
-    type Element = widget::animatables::Tween<PS::Element, TW::Element>;
+    type Element = widget::animatables::PlayTween<PS::Element, TW::Element>;
 
     fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Element) {
         let (id, (state, element)) = cx.with_new_id(|cx| {
             let (play_speed_id, play_speed_state, play_speed_element) = self.play_speed.build(cx);
             let (tweenable_id, tweenable_state, tweenable_element) = self.tweenable.build(cx);
 
-            let element = widget::animatables::Tween::new(
-                play_speed_element,
-                tweenable_element,
-                self.duration,
-            );
+            let element =
+                widget::animatables::PlayTween::new(play_speed_element, tweenable_element);
             (
                 (
                     play_speed_id,

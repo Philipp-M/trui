@@ -40,6 +40,8 @@ fn main() -> Result<()> {
                         if state.selected_tab == i { 2.0 } else { 1.0 },
                     ))
             };
+
+            let play_speed = if state.maximize { 1.0 } else { -1.0 };
             v_stack((
                 button(
                     "Click this button to animate!".fg(Color::Green),
@@ -48,33 +50,52 @@ fn main() -> Result<()> {
                 "Click these tabs to maximize each",
                 weighted_h_stack((tab(0), tab(1), tab(2), tab(3), tab(4))),
                 "Elastic Title"
-                    .fill_max_width((0.2..1.0).elastic_in_out_ease().tween(
-                        Duration::from_secs_f64(3.5),
-                        if state.maximize { 1.0 } else { -1.0 },
-                    ))
+                    .fill_max_width(
+                        (0.2..1.0)
+                            .duration(Duration::from_secs(3))
+                            .elastic_in_out_ease()
+                            .play(play_speed),
+                    )
                     .border((Borders::HORIZONTAL, BorderKind::ThickStraight)),
                 "Quadratic Title"
-                    .fill_max_width((0.2..1.0).quadratic_in_out_ease().tween(
-                        Duration::from_secs_f64(1.0),
-                        if state.maximize { 1.0 } else { -1.0 },
-                    ))
+                    .fill_max_width((0.2..1.0).quadratic_in_out_ease().play(play_speed))
                     .border((Borders::HORIZONTAL, BorderKind::ThickStraight)),
+                "This does some weird stuff"
+                    .fill_max_width(
+                        (
+                            (0.2..1.0).duration(Duration::from_secs(1)),
+                            (1.0..0.5)
+                                .duration(Duration::from_secs(2))
+                                .quadratic_in_out_ease(),
+                        )
+                            .duration(Duration::from_secs(2)) // Note the ratio of the durations specified above stays the same
+                            .play(play_speed),
+                    )
+                    .border((
+                        Borders::HORIZONTAL,
+                        BorderKind::ThickStraight,
+                        Style::default().fg(Color::Blue),
+                    )),
                 h_stack((
                     "This box resizes"
                         .fill_max_size(low_pass(0.05, if state.maximize { 0.2 } else { 0.8 }))
                         .border(Style::default().fg(Color::Red)),
                     "same, but different"
                         .border(BorderKind::Rounded)
-                        .fill_max_height(lerp(
-                            (0.1..1.0).quadratic_in_out_ease(),
-                            low_pass(0.05, if state.maximize { 0.7 } else { 0.1 }),
-                        )),
+                        .fill_max_height(
+                            (0.1..1.0)
+                                .quadratic_in_out_ease()
+                                .lerp(low_pass(0.05, if state.maximize { 0.7 } else { 0.1 })),
+                        ),
                 )),
                 "Expanding Title 2"
-                    .fill_max_width((0.2..1.0).reverse().quadratic_out_ease().tween(
-                        Duration::from_secs_f64(1.5),
-                        if state.maximize { 1.0 } else { -1.0 },
-                    ))
+                    .fill_max_width(
+                        (0.2..1.0)
+                            .reverse()
+                            .duration(Duration::from_millis(500))
+                            .quadratic_out_ease()
+                            .play(play_speed),
+                    )
                     .border((Borders::HORIZONTAL, BorderKind::DoubleStraight)),
             ))
         },
