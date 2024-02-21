@@ -129,30 +129,28 @@ impl<V, T: TweenableElement<V>, R: AnimatableElement<f64>> AnimatableElement<V> 
 
 // TODO Duration could also be animated, but I'm not sure it's worth the complexity (vs benefit)...
 #[derive(Clone, Debug)]
-pub struct Tween<PS, TW> {
+pub struct PlayTween<PS, TW> {
     pub(crate) play_speed: PS,
     current_time: Duration,
     pub(crate) tweenable: TW,
-    duration: Duration,
 }
 
-impl<PS, TW> Tween<PS, TW> {
-    pub(crate) fn new(play_speed: PS, tweenable: TW, duration: Duration) -> Self {
-        Tween {
+impl<PS, TW> PlayTween<PS, TW> {
+    pub(crate) fn new(play_speed: PS, tweenable: TW) -> Self {
+        PlayTween {
             play_speed,
             tweenable,
             current_time: Duration::ZERO,
-            duration,
         }
     }
 }
 
 impl<V: 'static, PS: AnimatableElement<f64>, TW: TweenableElement<V>> AnimatableElement<V>
-    for Tween<PS, TW>
+    for PlayTween<PS, TW>
 {
     fn animate(&mut self, cx: &mut LifeCycleCx) -> &V {
         let play_speed = self.play_speed.animate(cx);
-        let duration_as_secs = self.duration.as_secs_f64();
+        let duration_as_secs = self.tweenable.duration().as_secs_f64();
         let current_time_as_secs = self.current_time.as_secs_f64();
         let new_time = (current_time_as_secs
             + *play_speed * cx.time_since_last_render_request().as_secs_f64())
@@ -164,8 +162,8 @@ impl<V: 'static, PS: AnimatableElement<f64>, TW: TweenableElement<V>> Animatable
             current_time_as_secs / duration_as_secs
         };
 
-        if !self.duration.is_zero()
-            && ((*play_speed > 0.0 && self.current_time != self.duration)
+        if !self.tweenable.duration().is_zero()
+            && ((*play_speed > 0.0 && self.current_time != self.tweenable.duration())
                 || (*play_speed < 0.0 && self.current_time != Duration::ZERO))
         {
             self.current_time = Duration::from_secs_f64(new_time);
@@ -177,8 +175,50 @@ impl<V: 'static, PS: AnimatableElement<f64>, TW: TweenableElement<V>> Animatable
 
 // ---------------------------------- TWEENABLE
 
-pub trait TweenableElement<V>: 'static {
+pub trait TweenableElement<V>: 'static + AnyTweenableElement<V> {
     fn interpolate(&mut self, cx: &mut LifeCycleCx, ratio: f64) -> &V;
+
+    // TODO &mut?
+    // Could also be collecting a default from some kind of context (LifeCycleCx?)
+    /// Default duration is 1 second
+    fn duration(&mut self) -> Duration {
+        Duration::from_secs(1)
+    }
+}
+
+pub trait AnyTweenableElement<V> {
+    fn as_any(&self) -> &dyn Any;
+
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    fn type_name(&self) -> &'static str;
+}
+
+impl<V, A: TweenableElement<V>> AnyTweenableElement<V> for A {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<Self>()
+    }
+}
+
+impl<V: 'static> TweenableElement<V> for Box<dyn TweenableElement<V>> {
+    fn interpolate(&mut self, cx: &mut LifeCycleCx, ratio: f64) -> &V {
+        self.deref_mut().interpolate(cx, ratio)
+    }
+
+    // TODO &mut?
+    // Could also be collecting a default from some kind of context (LifeCycleCx?)
+    /// Default duration is 1 second
+    fn duration(&mut self) -> Duration {
+        self.deref_mut().duration()
+    }
 }
 
 pub struct TweenableRange<A, V> {
@@ -206,8 +246,89 @@ impl<A: AnimatableElement<f64>> TweenableElement<f64> for TweenableRange<A, f64>
         &mut self.value
     }
 }
+
+/// Overrides the duration of any tweenable it composes
+pub struct WithDuration<T> {
+    pub(crate) tweenable: T,
+    pub(crate) duration: Duration,
+}
+
+impl<T> WithDuration<T> {
+    pub(crate) fn new(tweenable: T, duration: Duration) -> Self {
+        Self {
+            tweenable,
+            duration,
+        }
+    }
+}
+
+impl<V, T: TweenableElement<V>> TweenableElement<V> for WithDuration<T> {
+    fn interpolate(&mut self, cx: &mut LifeCycleCx, ratio: f64) -> &V {
+        self.tweenable.interpolate(cx, ratio)
+    }
+
+    fn duration(&mut self) -> Duration {
+        self.duration
+    }
+}
+
+pub struct Sequence<V> {
+    pub(crate) tweenables: Vec<Box<dyn TweenableElement<V>>>,
+}
+
+impl<V> Sequence<V> {
+    pub fn new(tweenables: Vec<Box<dyn TweenableElement<V>>>) -> Self {
+        Self { tweenables }
+    }
+}
+
+impl<V: 'static> TweenableElement<V> for Sequence<V> {
+    fn interpolate(&mut self, cx: &mut LifeCycleCx, mut ratio: f64) -> &V {
+        let total_duration = self
+            .tweenables
+            .iter_mut()
+            .fold(Duration::ZERO, |acc, tweenable| acc + tweenable.duration());
+        let total_duration_f64 = total_duration.as_secs_f64();
+
+        if self.tweenables.is_empty() {
+            panic!("A Sequence should never be empty");
+        }
+
+        let mut duration_acc = Duration::ZERO;
+        let mut target_ix = None;
+
+        for (ix, tweenable) in self.tweenables.iter_mut().enumerate() {
+            let tween_duration = tweenable.duration();
+            let next_duration_acc = duration_acc + tween_duration;
+            let start_ratio = duration_acc.as_secs_f64() / total_duration_f64;
+            let end_ratio = next_duration_acc.as_secs_f64() / total_duration_f64;
+
+            if ratio >= start_ratio && ratio < end_ratio {
+                target_ix = Some(ix);
+                ratio = (ratio - start_ratio) / (end_ratio - start_ratio);
+                break;
+            }
+
+            duration_acc = next_duration_acc;
+        }
+
+        if let Some(ix) = target_ix {
+            self.tweenables[ix].interpolate(cx, ratio)
+        } else {
+            self.tweenables.last_mut().unwrap().interpolate(cx, 1.0)
+        }
+    }
+
+    fn duration(&mut self) -> Duration {
+        self.tweenables
+            .iter_mut()
+            .fold(Duration::ZERO, |acc, tweenable| acc + tweenable.duration())
+    }
+}
+
 pub mod ease {
     use crate::widget::LifeCycleCx;
+    use std::time::Duration;
 
     use super::TweenableElement;
 
@@ -220,6 +341,10 @@ pub mod ease {
                 fn interpolate(&mut self, cx: &mut LifeCycleCx, ratio: f64) -> &V {
                     #[allow(clippy::redundant_closure_call)]
                     self.0.interpolate(cx, $ease_fn(ratio))
+                }
+
+                fn duration(&mut self) -> Duration {
+                    self.0.duration()
                 }
             }
         };
