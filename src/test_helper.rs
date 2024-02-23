@@ -41,7 +41,7 @@ pub fn render_view<T: Send + 'static>(
             .backend_mut()
             .resize(buffer_size.width, buffer_size.height);
 
-        app.run_without_logging().unwrap()
+        app.run().unwrap()
     });
 
     let event_tx = event_rx.blocking_recv().unwrap();

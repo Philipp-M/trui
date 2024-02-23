@@ -1,5 +1,6 @@
 use anyhow::Result;
 use ratatui::style::Color;
+use trui::logging::setup_logging;
 use trui::{
     memoize, v_stack, AnyView, App, BorderKind, Borders, EventHandler, IntoBoxedView, Styleable,
     View, ViewExt,
@@ -64,6 +65,8 @@ impl AppState {
 }
 
 fn main() -> Result<()> {
+    let _ = setup_logging(tracing::Level::DEBUG)?;
+
     App::new(
         AppState {
             count: 10,

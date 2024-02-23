@@ -3,6 +3,7 @@ use futures::Stream;
 use ratatui::style::Color;
 use std::time::Duration;
 use tokio::time::{interval, sleep};
+use trui::logging::setup_logging;
 use trui::*;
 
 pub fn words_stream(input: &str) -> impl Stream<Item = String> + Send {
@@ -29,6 +30,8 @@ pub fn words_stream(input: &str) -> impl Stream<Item = String> + Send {
 }
 
 fn main() -> Result<()> {
+    let _ = setup_logging(tracing::Level::DEBUG)?;
+
     App::new(String::new(), |app_state| {
         v_stack((
             "Click me for some non-sense"

@@ -1,5 +1,6 @@
 use anyhow::Result;
 use ratatui::style::{Color, Style};
+use trui::logging::setup_logging;
 use trui::*;
 
 pub fn button<T>(
@@ -14,6 +15,8 @@ pub fn button<T>(
 }
 
 fn main() -> Result<()> {
+    let _ = setup_logging(tracing::Level::DEBUG)?;
+
     App::new(0, |count| {
         v_stack((
             button(

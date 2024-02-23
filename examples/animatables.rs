@@ -2,6 +2,7 @@ use std::{f64::consts::PI, time::Duration};
 
 use anyhow::Result;
 use ratatui::style::{Color, Style};
+use trui::logging::setup_logging;
 use trui::*;
 
 pub fn button<T>(
@@ -21,6 +22,8 @@ struct AppState {
 }
 
 fn main() -> Result<()> {
+    let _ = setup_logging(tracing::Level::DEBUG)?;
+
     App::new(
         AppState {
             maximize: false,

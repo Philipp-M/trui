@@ -20,7 +20,6 @@ use crossterm::{
 };
 
 use crossterm::event::{poll, read, Event as CxEvent, KeyCode, KeyEvent};
-use directories::ProjectDirs;
 use ratatui::Terminal;
 
 #[cfg(not(any(test, doctest, feature = "doctests")))]
@@ -31,7 +30,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
+
 use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
 
 #[cfg(any(test, doctest, feature = "doctests"))]
@@ -41,22 +40,6 @@ use ratatui::backend::TestBackend;
 use ratatui::backend::CrosstermBackend;
 #[cfg(not(any(test, doctest, feature = "doctests")))]
 use std::io::{Stdout, Write};
-
-// TODO less hardcoding and cross-platform support
-fn setup_logging(log_level: tracing::Level) -> Result<tracing_appender::non_blocking::WorkerGuard> {
-    let proj_dirs = ProjectDirs::from("", "", "trui").expect("Opening cache directory");
-    let cache_dir = proj_dirs.cache_dir();
-    let tracing_file_appender = tracing_appender::rolling::never(cache_dir, "trui.log");
-    let (tracing_file_writer, guard) = tracing_appender::non_blocking(tracing_file_appender);
-
-    let subscriber = Registry::default().with(
-        tracing_subscriber::fmt::Layer::default()
-            .with_writer(tracing_file_writer.with_max_level(log_level)),
-    );
-    tracing::subscriber::set_global_default(subscriber)?;
-
-    Ok(guard)
-}
 
 pub struct App<T: Send + 'static, V: View<T> + 'static> {
     req_chan: tokio::sync::mpsc::Sender<AppMessage>,
@@ -406,13 +389,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         }
     }
 
-    pub fn run(self) -> Result<()> {
-        let _guard = setup_logging(tracing::Level::DEBUG)?;
-        self.run_without_logging()
-    }
-
-    // TODO(zoechi): setup proper configuration for App
-    pub fn run_without_logging(mut self) -> Result<()> {
+    pub fn run(mut self) -> Result<()> {
         #[cfg(not(any(test, doctest, feature = "doctests")))]
         self.init_terminal()?;
 

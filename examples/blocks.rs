@@ -2,9 +2,12 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use ratatui::style::{Color, Style};
+use trui::logging::setup_logging;
 use trui::*;
 
 fn main() -> Result<()> {
+    let _ = setup_logging(tracing::Level::DEBUG)?;
+
     let view = Arc::new(
         weighted_h_stack((
             "text inside block"

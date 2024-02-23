@@ -1,4 +1,5 @@
 use anyhow::Result;
+use trui::logging::setup_logging;
 use trui::*;
 
 struct AppState {
@@ -46,6 +47,8 @@ fn button_use_state<T, V: View<(Handle<T>, i32)>>(
 }
 
 fn main() -> Result<()> {
+    let _ = setup_logging(tracing::Level::DEBUG)?;
+
     App::new(
         AppState {
             count: 0,
