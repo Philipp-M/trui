@@ -1,3 +1,6 @@
+#[cfg(not(any(test, doctest, feature = "doctests")))]
+use std::io::{stdout, Write};
+
 use crate::{
     geometry::{Point, Size},
     view::{Cx, View},
@@ -5,6 +8,7 @@ use crate::{
         BoxConstraints, CxState, Event, EventCx, LayoutCx, LifeCycle, LifeCycleCx, Message,
         PaintCx, Pod, PodFlags, ViewContext, WidgetState,
     },
+    AppConfig,
 };
 use anyhow::Result;
 
@@ -20,10 +24,6 @@ use crossterm::{
 };
 
 use crossterm::event::{poll, read, Event as CxEvent, KeyCode, KeyEvent};
-use ratatui::Terminal;
-
-#[cfg(not(any(test, doctest, feature = "doctests")))]
-use std::io::stdout;
 
 use std::{
     collections::HashSet,
@@ -33,15 +33,8 @@ use std::{
 
 use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
 
-#[cfg(any(test, doctest, feature = "doctests"))]
-use ratatui::backend::TestBackend;
-
-#[cfg(not(any(test, doctest, feature = "doctests")))]
-use ratatui::backend::CrosstermBackend;
-#[cfg(not(any(test, doctest, feature = "doctests")))]
-use std::io::{Stdout, Write};
-
 pub struct App<T: Send + 'static, V: View<T> + 'static> {
+    pub(crate) config: AppConfig,
     req_chan: tokio::sync::mpsc::Sender<AppMessage>,
     render_response_chan: tokio::sync::mpsc::Receiver<RenderResponse<V, V::State>>,
     return_chan: tokio::sync::mpsc::Sender<(V, V::State, HashSet<Id>)>,
@@ -50,11 +43,6 @@ pub struct App<T: Send + 'static, V: View<T> + 'static> {
     #[cfg(any(test, doctest, feature = "doctests"))]
     event_tx: tokio::sync::mpsc::Sender<Event>,
 
-    #[cfg(any(test, doctest, feature = "doctests"))]
-    terminal: Terminal<TestBackend>,
-
-    #[cfg(not(any(test, doctest, feature = "doctests")))]
-    terminal: Terminal<CrosstermBackend<Stdout>>,
     size: Size,
     request_render_notifier: Arc<tokio::sync::Notify>,
     cursor_pos: Option<Point>,
@@ -120,14 +108,14 @@ enum UiState {
 
 impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     pub fn new(data: T, app_logic: impl FnMut(&mut T) -> V + Send + 'static) -> Self {
-        #[cfg(not(any(test, doctest, feature = "doctests")))]
-        let backend = CrosstermBackend::new(stdout()); // TODO handle errors...
+        App::new_with_config(AppConfig::default(), data, app_logic)
+    }
 
-        #[cfg(any(test, doctest, feature = "doctests"))]
-        let backend = TestBackend::new(80, 40);
-
-        let terminal = Terminal::new(backend).unwrap();
-
+    pub fn new_with_config(
+        config: AppConfig,
+        data: T,
+        app_logic: impl FnMut(&mut T) -> V + Send + 'static,
+    ) -> Self {
         // Create a new tokio runtime. Doing it here is hacky, we should allow
         // the client to do it.
         let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
@@ -226,6 +214,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         let cx = Cx::new(&wake_tx, rt);
 
         App {
+            config,
             req_chan: message_tx,
             render_response_chan: response_rx,
             return_chan: return_tx,
@@ -234,7 +223,6 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             #[cfg(any(test, doctest, feature = "doctests"))]
             event_tx: event_tx.clone(),
 
-            terminal,
             size: Size::default(),
             cursor_pos: None,
             root_pod: None,
@@ -264,9 +252,9 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         let cx_state = &mut CxState::new(&mut self.events, time_since_last_render);
 
         // TODO via event (Event::Resize)?
-        self.terminal.autoresize()?;
+        self.config.terminal.autoresize()?;
 
-        let term_rect = self.terminal.size()?;
+        let term_rect = self.config.terminal.size()?;
         let ratatui::layout::Rect { width, height, .. } = term_rect;
         let term_size = Size {
             width: width as f64,
@@ -325,7 +313,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             let mut paint_cx = PaintCx {
                 widget_state: &mut self.root_state,
                 cx_state,
-                terminal: &mut self.terminal,
+                terminal: &mut self.config.terminal,
                 override_style: ratatui::style::Style::default(),
             };
 
@@ -334,15 +322,15 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             #[cfg(not(any(test, doctest, feature = "doctests")))]
             queue!(stdout(), BeginSynchronizedUpdate)?;
 
-            self.terminal.flush()?;
+            self.config.terminal.flush()?;
 
             #[cfg(not(any(test, doctest, feature = "doctests")))]
             execute!(stdout(), EndSynchronizedUpdate)?;
 
-            self.terminal.swap_buffers();
+            self.config.terminal.swap_buffers();
 
             #[cfg(not(any(test, doctest, feature = "doctests")))]
-            self.terminal.backend_mut().flush()?;
+            self.config.terminal.backend_mut().flush()?;
         }
 
         // currently only an animation update can request a rerender
@@ -393,7 +381,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         #[cfg(not(any(test, doctest, feature = "doctests")))]
         self.init_terminal()?;
 
-        self.terminal.clear()?;
+        self.config.terminal.clear()?;
 
         let main_loop_tracing_span = tracing::debug_span!("main loop");
         let mut time_of_last_render = Instant::now();
@@ -479,11 +467,6 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     #[cfg(any(test, doctest, feature = "doctests"))]
     pub fn event_tx(&self) -> tokio::sync::mpsc::Sender<Event> {
         self.event_tx.clone()
-    }
-
-    #[cfg(any(test, doctest, feature = "doctests"))]
-    pub fn terminal_mut(&mut self) -> &mut Terminal<TestBackend> {
-        &mut self.terminal
     }
 }
 

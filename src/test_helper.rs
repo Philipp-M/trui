@@ -37,7 +37,8 @@ pub fn render_view<T: Send + 'static>(
         });
         event_tx_clone.blocking_send(app.event_tx()).unwrap();
 
-        app.terminal_mut()
+        app.config
+            .terminal_mut()
             .backend_mut()
             .resize(buffer_size.width, buffer_size.height);
 
