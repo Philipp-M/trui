@@ -1,7 +1,6 @@
 mod app;
 mod app_config;
 pub mod geometry;
-pub mod logging;
 mod view;
 mod widget;
 

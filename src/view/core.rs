@@ -3,10 +3,8 @@ use std::{
     sync::{mpsc::SyncSender, Arc},
 };
 
-use futures_task::{ArcWake, Waker};
-use tokio::runtime::Runtime;
-
 use crate::widget::{AnyWidget, ChangeFlags, Pod, Widget};
+use futures_task::{ArcWake, Waker};
 use xilem_core::{Id, IdPath};
 
 xilem_core::generate_view_trait!(View, Widget, Cx, ChangeFlags; (ViewMarker + Send + Sync), (Send));
@@ -20,12 +18,12 @@ xilem_core::generate_rc_view!(std::sync::Arc, View, ViewMarker, Cx, ChangeFlags,
 pub struct Cx {
     id_path: IdPath,
     req_chan: SyncSender<IdPath>,
-    pub rt: Arc<Runtime>,
+    pub rt: tokio::runtime::Handle,
     pub(crate) pending_async: HashSet<Id>,
 }
 
 impl Cx {
-    pub(crate) fn new(req_chan: &SyncSender<IdPath>, rt: Arc<Runtime>) -> Self {
+    pub(crate) fn new(req_chan: &SyncSender<IdPath>, rt: tokio::runtime::Handle) -> Self {
         Cx {
             id_path: Vec::new(),
             req_chan: req_chan.clone(),

@@ -1,10 +1,12 @@
 use anyhow::Result;
 use ratatui::style::Color;
-use trui::logging::setup_logging;
 use trui::{
     memoize, v_stack, AnyView, App, BorderKind, Borders, EventHandler, IntoBoxedView, Styleable,
     View, ViewExt,
 };
+
+#[path = "./shared/logging.rs"]
+mod logging;
 
 // TODO this basic logic (hover, styling etc.) should probably be its own widget (state)...
 pub fn button<T>(
@@ -64,8 +66,9 @@ impl AppState {
     }
 }
 
-fn main() -> Result<()> {
-    let _ = setup_logging(tracing::Level::DEBUG)?;
+#[tokio::main]
+async fn main() -> Result<()> {
+    let _guard = crate::logging::setup_logging(tracing::Level::DEBUG)?;
 
     App::new(
         AppState {
@@ -135,5 +138,7 @@ fn main() -> Result<()> {
             ))
         },
     )
+    .await
     .run()
+    .await
 }

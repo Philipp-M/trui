@@ -2,11 +2,14 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use ratatui::style::{Color, Style};
-use trui::logging::setup_logging;
 use trui::*;
 
-fn main() -> Result<()> {
-    let _ = setup_logging(tracing::Level::DEBUG)?;
+#[path = "./shared/logging.rs"]
+mod logging;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let _guard = crate::logging::setup_logging(tracing::Level::DEBUG)?;
 
     let view = Arc::new(
         weighted_h_stack((
@@ -38,5 +41,5 @@ fn main() -> Result<()> {
         .border(BorderKind::Rounded)
         .margin(1),
     );
-    App::new((), move |()| view.clone()).run()
+    App::new((), move |()| view.clone()).await.run().await
 }
