@@ -247,6 +247,43 @@ impl<A: AnimatableElement<f64>> TweenableElement<f64> for TweenableRange<A, f64>
     }
 }
 
+pub struct Map<I, V, VO> {
+    pub(crate) input: I,
+    output: Option<VO>,
+    f: fn(&V) -> VO,
+}
+
+impl<I, V, VO> Map<I, V, VO> {
+    pub fn new(input: I, f: fn(&V) -> VO) -> Self {
+        Map {
+            input,
+            output: None,
+            f,
+        }
+    }
+
+    pub fn update_f(&mut self, f: fn(&V) -> VO) -> ChangeFlags {
+        if self.f != f {
+            self.f = f;
+            ChangeFlags::ANIMATION
+        } else {
+            ChangeFlags::empty()
+        }
+    }
+}
+
+impl<VO: 'static, V: 'static, I: TweenableElement<V>> TweenableElement<VO> for Map<I, V, VO> {
+    fn interpolate(&mut self, cx: &mut LifeCycleCx, ratio: f64) -> &VO {
+        let input = self.input.interpolate(cx, ratio);
+        self.output = Some((self.f)(input));
+        self.output.as_ref().unwrap()
+    }
+
+    fn duration(&mut self) -> Duration {
+        self.input.duration()
+    }
+}
+
 /// Overrides the duration of any tweenable it composes
 pub struct WithDuration<T> {
     pub(crate) tweenable: T,
