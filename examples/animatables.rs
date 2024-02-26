@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{f64::consts::PI, time::Duration};
 
 use anyhow::Result;
 use ratatui::style::{Color, Style};
@@ -76,6 +76,14 @@ fn main() -> Result<()> {
                         BorderKind::ThickStraight,
                         Style::default().fg(Color::Blue),
                     )),
+                "This is oscillating"
+                    .fill_max_width(
+                        (0.0..(4.0 * PI))
+                            .map(|v| v.cos() * 0.3 + 0.7)
+                            .duration(Duration::from_secs(4))
+                            .play(play_speed),
+                    )
+                    .border((Borders::HORIZONTAL, BorderKind::ThickStraight)),
                 h_stack((
                     "This box resizes"
                         .fill_max_size(low_pass(0.05, if state.maximize { 0.2 } else { 0.8 }))

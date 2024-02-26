@@ -269,6 +269,14 @@ pub trait Tweenable<V>: Send + Sync {
         }
     }
 
+    /// Maps a function on the value of the `Tweenable`
+    fn map<VO>(self, f: fn(&V) -> VO) -> Map<Self, V, VO>
+    where
+        Self: Sized,
+    {
+        Map { input: self, f }
+    }
+
     fn play<PS>(self, play_speed: PS) -> PlayTween<PS, Self>
     where
         Self: Sized,
@@ -441,6 +449,48 @@ impl<V: 'static, T1: Tweenable<V>, T2: Tweenable<V>> Tweenable<V> for (T1, T2) {
             [id, rest_path @ ..] if id == id1 => self.1.message(rest_path, state1, message),
             [..] => MessageResult::Stale(message),
         }
+    }
+}
+
+pub struct Map<T, V, VO> {
+    input: T,
+    f: fn(&V) -> VO,
+}
+
+impl<V: Send + Sync + 'static, VO: Send + Sync + 'static, T: Tweenable<V>> Tweenable<VO>
+    for Map<T, V, VO>
+{
+    type State = T::State;
+
+    type Element = widget::animatables::Map<T::Element, V, VO>;
+
+    fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Element) {
+        let (id, state, input_el) = self.input.build(cx);
+        let element = widget::animatables::Map::new(input_el, self.f);
+        (id, state, element)
+    }
+
+    fn rebuild(
+        &self,
+        cx: &mut Cx,
+        prev: &Self,
+        id: &mut Id,
+        state: &mut Self::State,
+        element: &mut Self::Element,
+    ) -> ChangeFlags {
+        element.update_f(self.f)
+            | self
+                .input
+                .rebuild(cx, &prev.input, id, state, &mut element.input)
+    }
+
+    fn message(
+        &self,
+        id_path: &[Id],
+        state: &mut Self::State,
+        message: Box<dyn std::any::Any>,
+    ) -> MessageResult<()> {
+        self.input.message(id_path, state, message)
     }
 }
 
