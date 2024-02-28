@@ -1,7 +1,6 @@
 use std::{f64::consts::PI, time::Duration};
 
 use anyhow::Result;
-use ratatui::style::{Color, Style};
 use trui::*;
 
 #[path = "./shared/logging.rs"]
