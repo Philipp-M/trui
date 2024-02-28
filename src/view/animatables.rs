@@ -299,6 +299,14 @@ pub trait Tweenable<V>: Send + Sync {
         }
     }
 
+    /// Maps an ease function, with an ratio as input between 0.0..=1.0, the output has to be in the same range
+    fn map_ease(self, f: fn(f64) -> f64) -> MapEase<Self>
+    where
+        Self: Sized,
+    {
+        MapEase { input: self, f }
+    }
+
     // Convenience modifier methods
     fn reverse(self) -> ease::Reverse<Self>
     where
@@ -470,6 +478,46 @@ impl<V: Send + Sync + 'static, VO: Send + Sync + 'static, T: Tweenable<V>> Tween
     fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Element) {
         let (id, state, input_el) = self.input.build(cx);
         let element = widget::animatables::Map::new(input_el, self.f);
+        (id, state, element)
+    }
+
+    fn rebuild(
+        &self,
+        cx: &mut Cx,
+        prev: &Self,
+        id: &mut Id,
+        state: &mut Self::State,
+        element: &mut Self::Element,
+    ) -> ChangeFlags {
+        element.update_f(self.f)
+            | self
+                .input
+                .rebuild(cx, &prev.input, id, state, &mut element.input)
+    }
+
+    fn message(
+        &self,
+        id_path: &[Id],
+        state: &mut Self::State,
+        message: Box<dyn std::any::Any>,
+    ) -> MessageResult<()> {
+        self.input.message(id_path, state, message)
+    }
+}
+
+pub struct MapEase<T> {
+    input: T,
+    f: fn(f64) -> f64,
+}
+
+impl<V, T: Tweenable<V>> Tweenable<V> for MapEase<T> {
+    type State = T::State;
+
+    type Element = widget::animatables::MapEase<T::Element>;
+
+    fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Element) {
+        let (id, state, input_el) = self.input.build(cx);
+        let element = widget::animatables::MapEase::new(input_el, self.f);
         (id, state, element)
     }
 

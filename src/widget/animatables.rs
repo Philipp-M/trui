@@ -284,6 +284,36 @@ impl<VO: 'static, V: 'static, I: TweenableElement<V>> TweenableElement<VO> for M
     }
 }
 
+pub struct MapEase<I> {
+    pub(crate) input: I,
+    f: fn(f64) -> f64,
+}
+
+impl<I> MapEase<I> {
+    pub fn new(input: I, f: fn(f64) -> f64) -> Self {
+        MapEase { input, f }
+    }
+
+    pub fn update_f(&mut self, f: fn(f64) -> f64) -> ChangeFlags {
+        if self.f != f {
+            self.f = f;
+            ChangeFlags::ANIMATION
+        } else {
+            ChangeFlags::empty()
+        }
+    }
+}
+
+impl<V, I: TweenableElement<V>> TweenableElement<V> for MapEase<I> {
+    fn interpolate(&mut self, cx: &mut LifeCycleCx, ratio: f64) -> &V {
+        self.input.interpolate(cx, (self.f)(ratio))
+    }
+
+    fn duration(&mut self) -> Duration {
+        self.input.duration()
+    }
+}
+
 /// Overrides the duration of any tweenable it composes
 pub struct WithDuration<T> {
     pub(crate) tweenable: T,
