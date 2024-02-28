@@ -1,13 +1,17 @@
 use std::env;
+use std::error::Error;
+use std::fs::File;
 use std::io::stdout;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use directories::ProjectDirs;
 use ratatui::layout::Size;
 use ratatui::prelude::*;
 
-use ratatui::{Terminal, TerminalOptions, Viewport};
 use tokio::sync::mpsc;
+use tracing::subscriber::DefaultGuard;
+use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt};
 use xilem_core::MessageResult;
 
 use crate::widget::{BoxConstraints, ChangeFlags, Event};
@@ -20,36 +24,34 @@ use crate::{App, Cx, View, ViewMarker};
 /// * `sut` - A closure that returns the widget to test when called.
 ///   This expects a function so it can create it inside the thread of the [`App`].
 /// * `state` - Is the state for the [`App`]
-pub fn render_view<T: Send + 'static>(
+///
+/// Because [`App`](crate::App) is not [`Send`](Send), this function needs to be
+/// executed inside a [`LocalSet`](tokio::task::LocalSet)
+pub async fn render_view<T: Send + 'static>(
     buffer_size: Size,
     sut: Arc<impl View<T> + 'static>,
     state: T,
 ) -> Buffer {
     const CHANNEL_SIZE: usize = 3;
     let (message_tx, mut message_rx) = mpsc::channel::<Buffer>(CHANNEL_SIZE);
-    let (event_tx, mut event_rx) = mpsc::channel(CHANNEL_SIZE);
+    let mut app = App::new(state, move |_state| {
+        debug_view(sut.clone(), message_tx.clone())
+    })
+    .await;
 
-    let event_tx_clone = event_tx.clone();
+    let event_tx = app.event_tx();
+    app.config
+        .terminal_mut()
+        .backend_mut()
+        .resize(buffer_size.width, buffer_size.height);
 
-    let join_handle = std::thread::spawn(move || {
-        let mut app = App::new(state, move |_state| {
-            debug_view(sut.clone(), message_tx.clone())
-        });
-        event_tx_clone.blocking_send(app.event_tx()).unwrap();
-
-        app.terminal_mut()
-            .backend_mut()
-            .resize(buffer_size.width, buffer_size.height);
-
-        app.run_without_logging().unwrap()
+    tokio::task::spawn_local(async {
+        app.run().await.unwrap();
     });
 
-    let event_tx = event_rx.blocking_recv().unwrap();
+    let buffer = message_rx.recv().await;
 
-    let buffer = message_rx.blocking_recv();
-    let send_quit_ack = event_tx.blocking_send(Event::Quit);
-
-    join_handle.join().unwrap();
+    let send_quit_ack = event_tx.send(Event::Quit).await;
 
     // delay unwrapping until after join_handle.join() to not mask errors from the spawned thread
     send_quit_ack.unwrap();
@@ -143,7 +145,10 @@ impl Widget for DebugWidget {
         cx.terminal.flush().unwrap();
 
         let buffer = cx.terminal.backend().buffer().to_owned();
-        self.debug_chan_tx.blocking_send(buffer).unwrap();
+        let chan_tx = self.debug_chan_tx.clone();
+        tokio::task::spawn_local(async move {
+            chan_tx.send(buffer).await.unwrap();
+        });
     }
 
     fn layout(&mut self, cx: &mut crate::widget::LayoutCx, bc: &BoxConstraints) -> kurbo::Size {
@@ -186,4 +191,22 @@ pub fn print_buffer(buffer: &Buffer) -> std::io::Result<()> {
         crossterm::queue!(stdout(), crossterm::cursor::MoveTo(0, buffer.area.height))?;
     };
     Ok(())
+}
+
+/// Initialize tracing individually for each thread so that concurrently running
+/// tests do not cause conflicts
+pub fn init_tracing(test_name: &str) -> Result<DefaultGuard, Box<dyn Error>> {
+    let proj_dirs = ProjectDirs::from("", "", "trui").expect("Opening cache directory");
+    let cache_dir = proj_dirs.cache_dir();
+
+    let file = File::create(cache_dir.join(format!("{test_name}.log")))?;
+
+    let subscriber = tracing_subscriber::registry().with(
+        tracing_subscriber::fmt::Layer::default()
+            .with_writer(Arc::new(file).with_max_level(tracing::Level::DEBUG)),
+    );
+
+    let guard = tracing::subscriber::set_default(subscriber);
+
+    Ok(guard)
 }

@@ -5,6 +5,9 @@ use trui::{
     View, ViewExt,
 };
 
+#[path = "./shared/logging.rs"]
+mod logging;
+
 // TODO this basic logic (hover, styling etc.) should probably be its own widget (state)...
 pub fn button<T>(
     label: impl Into<String>,
@@ -63,7 +66,10 @@ impl AppState {
     }
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
+    let _guard = crate::logging::setup_logging(tracing::Level::DEBUG)?;
+
     App::new(
         AppState {
             count: 10,
@@ -132,5 +138,7 @@ fn main() -> Result<()> {
             ))
         },
     )
+    .await
     .run()
+    .await
 }

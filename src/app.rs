@@ -1,3 +1,8 @@
+#[cfg(not(any(test, doctest, feature = "doctests")))]
+use std::io::{stdout, Write};
+
+use futures::StreamExt;
+
 use crate::{
     geometry::{Point, Size},
     view::{Cx, View},
@@ -5,6 +10,7 @@ use crate::{
         BoxConstraints, CxState, Event, EventCx, LayoutCx, LifeCycle, LifeCycleCx, Message,
         PaintCx, Pod, PodFlags, ViewContext, WidgetState,
     },
+    AppConfig,
 };
 use anyhow::Result;
 
@@ -19,46 +25,18 @@ use crossterm::{
     },
 };
 
-use crossterm::event::{poll, read, Event as CxEvent, KeyCode, KeyEvent};
-use directories::ProjectDirs;
-use ratatui::Terminal;
-
-#[cfg(not(any(test, doctest, feature = "doctests")))]
-use std::io::stdout;
+use crossterm::event::{Event as CxEvent, KeyCode, KeyEvent};
 
 use std::{
     collections::HashSet,
     sync::Arc,
     time::{Duration, Instant},
 };
-use tracing_subscriber::{fmt::writer::MakeWriterExt, layer::SubscriberExt, Registry};
+
 use xilem_core::{AsyncWake, Id, IdPath, MessageResult};
 
-#[cfg(any(test, doctest, feature = "doctests"))]
-use ratatui::backend::TestBackend;
-
-#[cfg(not(any(test, doctest, feature = "doctests")))]
-use ratatui::backend::CrosstermBackend;
-#[cfg(not(any(test, doctest, feature = "doctests")))]
-use std::io::{Stdout, Write};
-
-// TODO less hardcoding and cross-platform support
-fn setup_logging(log_level: tracing::Level) -> Result<tracing_appender::non_blocking::WorkerGuard> {
-    let proj_dirs = ProjectDirs::from("", "", "trui").expect("Opening cache directory");
-    let cache_dir = proj_dirs.cache_dir();
-    let tracing_file_appender = tracing_appender::rolling::never(cache_dir, "trui.log");
-    let (tracing_file_writer, guard) = tracing_appender::non_blocking(tracing_file_appender);
-
-    let subscriber = Registry::default().with(
-        tracing_subscriber::fmt::Layer::default()
-            .with_writer(tracing_file_writer.with_max_level(log_level)),
-    );
-    tracing::subscriber::set_global_default(subscriber)?;
-
-    Ok(guard)
-}
-
 pub struct App<T: Send + 'static, V: View<T> + 'static> {
+    pub(crate) config: AppConfig,
     req_chan: tokio::sync::mpsc::Sender<AppMessage>,
     render_response_chan: tokio::sync::mpsc::Receiver<RenderResponse<V, V::State>>,
     return_chan: tokio::sync::mpsc::Sender<(V, V::State, HashSet<Id>)>,
@@ -67,11 +45,6 @@ pub struct App<T: Send + 'static, V: View<T> + 'static> {
     #[cfg(any(test, doctest, feature = "doctests"))]
     event_tx: tokio::sync::mpsc::Sender<Event>,
 
-    #[cfg(any(test, doctest, feature = "doctests"))]
-    terminal: Terminal<TestBackend>,
-
-    #[cfg(not(any(test, doctest, feature = "doctests")))]
-    terminal: Terminal<CrosstermBackend<Stdout>>,
     size: Size,
     request_render_notifier: Arc<tokio::sync::Notify>,
     cursor_pos: Option<Point>,
@@ -136,18 +109,18 @@ enum UiState {
 }
 
 impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
-    pub fn new(data: T, app_logic: impl FnMut(&mut T) -> V + Send + 'static) -> Self {
-        #[cfg(not(any(test, doctest, feature = "doctests")))]
-        let backend = CrosstermBackend::new(stdout()); // TODO handle errors...
+    pub async fn new(data: T, app_logic: impl FnMut(&mut T) -> V + Send + 'static) -> Self {
+        App::new_with_config(AppConfig::default(), data, app_logic).await
+    }
 
-        #[cfg(any(test, doctest, feature = "doctests"))]
-        let backend = TestBackend::new(80, 40);
-
-        let terminal = Terminal::new(backend).unwrap();
-
-        // Create a new tokio runtime. Doing it here is hacky, we should allow
+    pub async fn new_with_config(
+        config: AppConfig,
+        data: T,
+        app_logic: impl FnMut(&mut T) -> V + Send + 'static,
+    ) -> Self {
+        // TODO(zoechi): Create a new tokio runtime. Doing it here is hacky, we should allow
         // the client to do it.
-        let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
+        // let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
 
         // Note: there is danger of deadlock if exceeded; think this through.
         const CHANNEL_SIZE: usize = 1000;
@@ -163,10 +136,10 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         // It's a sync_channel because sender needs to be sync to work in an async
         // context. Consider crossbeam and flume channels as alternatives.
         let message_tx_clone = message_tx.clone();
-        let (wake_tx, wake_rx) = std::sync::mpsc::sync_channel(10);
-        std::thread::spawn(move || {
-            while let Ok(id_path) = wake_rx.recv() {
-                let _ = message_tx_clone.blocking_send(AppMessage::Wake(id_path));
+        let (wake_tx, mut wake_rx) = tokio::sync::mpsc::channel(10);
+        tokio::task::spawn(async move {
+            while let Some(id_path) = wake_rx.recv().await {
+                let _ = message_tx_clone.send(AppMessage::Wake(id_path)).await;
             }
         });
 
@@ -176,7 +149,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         let event_tx_clone = event_tx.clone();
 
         // Until we have a solid way to sync with the screen refresh rate, do an update every 1/60 secs when it is requested
-        rt.spawn(async move {
+        tokio::task::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs_f64(1.0 / 60.0));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
@@ -191,40 +164,40 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
 
         // spawn io event proxy task
         let event_tx_clone = event_tx.clone();
-        std::thread::spawn(move || {
-            loop {
-                if let Ok(true) = poll(Duration::from_millis(100)) {
-                    let event = match read() {
-                        // TODO quit app at least for now, until proper key handling is implemented, then this thread might need a signal to quit itself
-                        Ok(CxEvent::Key(KeyEvent {
-                            code: KeyCode::Esc, ..
-                        })) => Event::Quit,
-                        Ok(CxEvent::Key(key_event)) => Event::Key(key_event),
-                        Ok(CxEvent::Mouse(mouse_event)) => Event::Mouse(mouse_event.into()),
-                        Ok(CxEvent::FocusGained) => Event::FocusGained,
-                        Ok(CxEvent::FocusLost) => Event::FocusLost,
-                        // CxEvent::Paste(_) => todo!(),
-                        Ok(CxEvent::Resize(width, height)) => Event::Resize { width, height },
-                        _ => continue, // TODO handle other kinds of events and errors
-                    };
+        tokio::task::spawn(async move {
+            // let mut interval = tokio::time::interval(Duration::from_millis(100));
+            let mut reader = crossterm::event::EventStream::new();
+            while let Some(event) = reader.next().await {
+                let event = match event {
+                    // TODO quit app at least for now, until proper key handling is implemented, then this thread might need a signal to quit itself
+                    Ok(CxEvent::Key(KeyEvent {
+                        code: KeyCode::Esc, ..
+                    })) => Event::Quit,
+                    Ok(CxEvent::Key(key_event)) => Event::Key(key_event),
+                    Ok(CxEvent::Mouse(mouse_event)) => Event::Mouse(mouse_event.into()),
+                    Ok(CxEvent::FocusGained) => Event::FocusGained,
+                    Ok(CxEvent::FocusLost) => Event::FocusLost,
+                    // CxEvent::Paste(_) => todo!(),
+                    Ok(CxEvent::Resize(width, height)) => Event::Resize { width, height },
+                    _ => continue, // TODO handle other kinds of events and errors
+                };
 
-                    let quit = matches!(event, Event::Quit);
+                let quit = matches!(event, Event::Quit);
 
-                    let _ = event_tx_clone.blocking_send(event);
+                let _ = event_tx_clone.send(event).await;
 
-                    if quit {
-                        break;
-                    }
+                if quit {
+                    break;
                 }
             }
         });
 
         // Send this event here, so that the app renders directly when it is run.
-        let _ = event_tx.blocking_send(Event::Start);
+        let _ = event_tx.send(Event::Start).await;
 
         let event_tx_clone = event_tx.clone();
         // spawn app task
-        rt.spawn(async move {
+        tokio::task::spawn(async move {
             let mut app_task = AppTask {
                 req_chan: message_rx,
                 response_chan: response_tx,
@@ -240,9 +213,10 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             app_task.run().await;
         });
 
-        let cx = Cx::new(&wake_tx, rt);
+        let cx = Cx::new(wake_tx, config.runtime_handle());
 
         App {
+            config,
             req_chan: message_tx,
             render_response_chan: response_rx,
             return_chan: return_tx,
@@ -251,7 +225,6 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             #[cfg(any(test, doctest, feature = "doctests"))]
             event_tx: event_tx.clone(),
 
-            terminal,
             size: Size::default(),
             cursor_pos: None,
             root_pod: None,
@@ -263,27 +236,27 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         }
     }
 
-    fn send_events(&mut self) {
+    async fn send_events(&mut self) {
         if !self.events.is_empty() {
             let events = std::mem::take(&mut self.events);
-            let _ = self.req_chan.blocking_send(AppMessage::Events(events));
+            let _ = self.req_chan.send(AppMessage::Events(events)).await;
         }
     }
 
     /// Run the app logic and update the widget tree.
     /// Returns whether a rerender should be scheduled
     #[tracing::instrument(skip(self))]
-    fn render(&mut self, time_since_last_render: Duration) -> Result<bool> {
-        if self.build_widget_tree(false) {
-            self.build_widget_tree(true);
+    async fn render(&mut self, time_since_last_render: Duration) -> Result<bool> {
+        if self.build_widget_tree(false).await {
+            self.build_widget_tree(true).await;
         }
         let root_pod = self.root_pod.as_mut().unwrap();
         let cx_state = &mut CxState::new(&mut self.events, time_since_last_render);
 
         // TODO via event (Event::Resize)?
-        self.terminal.autoresize()?;
+        self.config.terminal.autoresize()?;
 
-        let term_rect = self.terminal.size()?;
+        let term_rect = self.config.terminal.size()?;
         let ratatui::layout::Rect { width, height, .. } = term_rect;
         let term_size = Size {
             width: width as f64,
@@ -342,7 +315,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             let mut paint_cx = PaintCx {
                 widget_state: &mut self.root_state,
                 cx_state,
-                terminal: &mut self.terminal,
+                terminal: &mut self.config.terminal,
                 override_style: ratatui::style::Style::default(),
             };
 
@@ -351,15 +324,15 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             #[cfg(not(any(test, doctest, feature = "doctests")))]
             queue!(stdout(), BeginSynchronizedUpdate)?;
 
-            self.terminal.flush()?;
+            self.config.terminal.flush()?;
 
             #[cfg(not(any(test, doctest, feature = "doctests")))]
             execute!(stdout(), EndSynchronizedUpdate)?;
 
-            self.terminal.swap_buffers();
+            self.config.terminal.swap_buffers();
 
             #[cfg(not(any(test, doctest, feature = "doctests")))]
-            self.terminal.backend_mut().flush()?;
+            self.config.terminal.backend_mut().flush()?;
         }
 
         // currently only an animation update can request a rerender
@@ -369,10 +342,10 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     /// Run one pass of app logic.
     ///
     /// Return value is whether there are any pending async futures.
-    fn build_widget_tree(&mut self, delay: bool) -> bool {
+    async fn build_widget_tree(&mut self, delay: bool) -> bool {
         self.cx.pending_async.clear();
-        let _ = self.req_chan.blocking_send(AppMessage::Render(delay));
-        if let Some(response) = self.render_response_chan.blocking_recv() {
+        let _ = self.req_chan.send(AppMessage::Render(delay)).await;
+        if let Some(response) = self.render_response_chan.recv().await {
             let state = if let Some(widget) = self.root_pod.as_mut() {
                 let mut state = response.state.unwrap();
                 let changes = response.view.rebuild(
@@ -397,31 +370,23 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             };
             let pending = std::mem::take(&mut self.cx.pending_async);
             let has_pending = !pending.is_empty();
-            let _ = self
-                .return_chan
-                .blocking_send((response.view, state, pending));
+            let _ = self.return_chan.send((response.view, state, pending)).await;
             has_pending
         } else {
             false
         }
     }
 
-    pub fn run(self) -> Result<()> {
-        let _guard = setup_logging(tracing::Level::DEBUG)?;
-        self.run_without_logging()
-    }
-
-    // TODO(zoechi): setup proper configuration for App
-    pub fn run_without_logging(mut self) -> Result<()> {
+    pub async fn run(mut self) -> Result<()> {
         #[cfg(not(any(test, doctest, feature = "doctests")))]
         self.init_terminal()?;
 
-        self.terminal.clear()?;
+        self.config.terminal.clear()?;
 
         let main_loop_tracing_span = tracing::debug_span!("main loop");
         let mut time_of_last_render = Instant::now();
         let mut time_since_last_render_request = Duration::ZERO;
-        while let Some(event) = self.event_chan.blocking_recv() {
+        while let Some(event) = self.event_chan.recv().await {
             let mut events = vec![event];
             // batch events
             while let Ok(event) = self.event_chan.try_recv() {
@@ -451,9 +416,9 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
                     root_pod.event(&mut cx, &event);
                 }
             }
-            self.send_events();
+            self.send_events().await;
 
-            let rerender_requested = self.render(time_since_last_render_request)?;
+            let rerender_requested = self.render(time_since_last_render_request).await?;
             // TODO this is a workaround (I consider this at least as that) for getting animations right
             // There's likely a cleaner solution
             if rerender_requested {
@@ -502,11 +467,6 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
     #[cfg(any(test, doctest, feature = "doctests"))]
     pub fn event_tx(&self) -> tokio::sync::mpsc::Sender<Event> {
         self.event_tx.clone()
-    }
-
-    #[cfg(any(test, doctest, feature = "doctests"))]
-    pub fn terminal_mut(&mut self) -> &mut Terminal<TestBackend> {
-        &mut self.terminal
     }
 }
 

@@ -5,6 +5,9 @@ use std::time::Duration;
 use tokio::time::{interval, sleep};
 use trui::*;
 
+#[path = "./shared/logging.rs"]
+mod logging;
+
 pub fn words_stream(input: &str) -> impl Stream<Item = String> + Send {
     let words = input
         .split_whitespace()
@@ -28,7 +31,10 @@ pub fn words_stream(input: &str) -> impl Stream<Item = String> + Send {
     )
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
+    let _guard = crate::logging::setup_logging(tracing::Level::DEBUG)?;
+
     App::new(String::new(), |app_state| {
         v_stack((
             "Click me for some non-sense"
@@ -90,5 +96,7 @@ fn main() -> Result<()> {
                 }),
         ))
     })
+    .await
     .run()
+    .await
 }

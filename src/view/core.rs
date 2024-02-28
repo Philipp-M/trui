@@ -1,12 +1,7 @@
-use std::{
-    collections::HashSet,
-    sync::{mpsc::SyncSender, Arc},
-};
-
-use futures_task::{ArcWake, Waker};
-use tokio::runtime::Runtime;
+use std::{collections::HashSet, sync::Arc};
 
 use crate::widget::{AnyWidget, ChangeFlags, Pod, Widget};
+use futures_task::{ArcWake, Waker};
 use xilem_core::{Id, IdPath};
 
 xilem_core::generate_view_trait!(View, Widget, Cx, ChangeFlags; (ViewMarker + Send + Sync), (Send));
@@ -19,13 +14,16 @@ xilem_core::generate_rc_view!(std::sync::Arc, View, ViewMarker, Cx, ChangeFlags,
 
 pub struct Cx {
     id_path: IdPath,
-    req_chan: SyncSender<IdPath>,
-    pub rt: Arc<Runtime>,
+    req_chan: tokio::sync::mpsc::Sender<IdPath>,
+    pub rt: tokio::runtime::Handle,
     pub(crate) pending_async: HashSet<Id>,
 }
 
 impl Cx {
-    pub(crate) fn new(req_chan: &SyncSender<IdPath>, rt: Arc<Runtime>) -> Self {
+    pub(crate) fn new(
+        req_chan: tokio::sync::mpsc::Sender<IdPath>,
+        rt: tokio::runtime::Handle,
+    ) -> Self {
         Cx {
             id_path: Vec::new(),
             req_chan: req_chan.clone(),
@@ -90,12 +88,15 @@ impl Cx {
 
 struct MyWaker {
     id_path: IdPath,
-    req_chan: SyncSender<IdPath>,
+    req_chan: tokio::sync::mpsc::Sender<IdPath>,
 }
 
 impl ArcWake for MyWaker {
     fn wake_by_ref(arc_self: &Arc<Self>) {
-        let _ = arc_self.req_chan.send(arc_self.id_path.clone());
+        arc_self
+            .req_chan
+            .blocking_send(arc_self.id_path.clone())
+            .unwrap();
     }
 }
 

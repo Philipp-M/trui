@@ -2,6 +2,9 @@ use anyhow::Result;
 use ratatui::style::{Color, Style};
 use trui::*;
 
+#[path = "./shared/logging.rs"]
+mod logging;
+
 pub fn button<T>(
     content: impl View<T>,
     click_cb: impl EventHandler<T> + Send,
@@ -13,7 +16,10 @@ pub fn button<T>(
         .on_click(click_cb)
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
+    let _guard = crate::logging::setup_logging(tracing::Level::DEBUG)?;
+
     App::new(0, |count| {
         v_stack((
             button(
@@ -25,5 +31,7 @@ fn main() -> Result<()> {
             }),
         ))
     })
+    .await
     .run()
+    .await
 }

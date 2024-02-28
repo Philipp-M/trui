@@ -2,9 +2,9 @@ use super::{Cx, PendingTask, Styleable, View, ViewMarker};
 use crate::widget::{self, CatchMouseButton, ChangeFlags};
 use futures_util::{Future, Stream, StreamExt};
 use ratatui::style::Style;
+use std::marker::PhantomData;
 use std::task::Waker;
-use std::{marker::PhantomData, sync::Arc};
-use tokio::{runtime::Runtime, sync::mpsc::Receiver, task::JoinHandle};
+use tokio::{sync::mpsc::Receiver, task::JoinHandle};
 use xilem_core::{AsyncWake, Id, MessageResult};
 
 pub trait EventHandler<T, A = (), E = ()>: Send + Sync {
@@ -138,7 +138,7 @@ pub enum StreamMessage<E> {
 
 pub struct StreamEventHandlerState<E> {
     waker: Waker,
-    runtime: Arc<Runtime>,
+    runtime: tokio::runtime::Handle,
     chan: Option<Receiver<Option<E>>>,
     started: bool,
     is_streaming: bool,
@@ -146,7 +146,7 @@ pub struct StreamEventHandlerState<E> {
 }
 
 impl<E: Send + 'static> StreamEventHandlerState<E> {
-    fn new(waker: Waker, runtime: Arc<Runtime>) -> Self {
+    fn new(waker: Waker, runtime: tokio::runtime::Handle) -> Self {
         Self {
             waker,
             runtime,
@@ -296,7 +296,7 @@ where
     FF: Fn(&mut T, E) -> F + Send + Sync,
     CF: Fn(&mut T, FO) + Send + Sync,
 {
-    type State = (Option<PendingTask<FO>>, Arc<Runtime>, Waker);
+    type State = (Option<PendingTask<FO>>, tokio::runtime::Handle, Waker);
 
     fn build(&self, cx: &mut Cx) -> (Id, Self::State) {
         cx.with_new_id(|cx| (None, cx.rt.clone(), cx.waker()))

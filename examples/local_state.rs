@@ -1,6 +1,9 @@
 use anyhow::Result;
 use trui::*;
 
+#[path = "./shared/logging.rs"]
+mod logging;
+
 struct AppState {
     count: i32,
     local_state: i32,
@@ -45,7 +48,10 @@ fn button_use_state<T, V: View<(Handle<T>, i32)>>(
     )
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
+    let _guard = crate::logging::setup_logging(tracing::Level::DEBUG)?;
+
     App::new(
         AppState {
             count: 0,
@@ -69,5 +75,7 @@ fn main() -> Result<()> {
             ))
         },
     )
+    .await
     .run()
+    .await
 }
