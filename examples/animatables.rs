@@ -100,6 +100,7 @@ fn main() -> Result<()> {
                     .fill_max_width(
                         (0.2..1.0)
                             .reverse()
+                            .map_ease(|r| 1.0 - r) // cancels out the reverse(). Why? Because it's possible...
                             .duration(Duration::from_millis(500))
                             .quadratic_out_ease()
                             .play(play_speed),
