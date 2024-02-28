@@ -391,66 +391,69 @@ impl<A: Animatable<f64>> Tweenable<f64> for Range<A> {
 }
 
 // Sequence of multiple tweenables, not sure yet whether this should be done via tuples (as that syntax is already used by ViewSequences)
-impl<V: 'static, T1: Tweenable<V>, T2: Tweenable<V>> Tweenable<V> for (T1, T2) {
-    type State = ((Id, T1::State), (Id, T2::State));
+macro_rules! impl_tweenable_for_tuple {
+    ($( $t:ident),* ; $( $i:tt ),*) => {
+        impl<V: 'static, $($t: Tweenable<V>),*> Tweenable<V> for ($($t,)*) {
+            type State = ($((Id, $t::State),)*);
 
-    type Element = widget::animatables::Sequence<V>;
+            type Element = widget::animatables::Sequence<V>;
 
-    fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Element) {
-        let (id, (state, element)) = cx.with_new_id(|cx| {
-            let (id0, state0, element0) = self.0.build(cx);
-            let (id1, state1, element1) = self.1.build(cx);
-            let element =
-                widget::animatables::Sequence::new(vec![Box::new(element0), Box::new(element1)]);
-            (((id0, state0), (id1, state1)), element)
-        });
-        (id, state, element)
-    }
+            fn build(&self, cx: &mut Cx) -> (Id, Self::State, Self::Element) {
+                let (id, (state, element)) = cx.with_new_id(|cx| {
+                    let b = ($(self.$i.build(cx),)*);
+                    let element = widget::animatables::Sequence::new(vec![$(Box::new(b.$i.2),)*]);
+                    (($((b.$i.0, b.$i.1),)*), element)
+                });
+                (id, state, element)
+            }
 
-    fn rebuild(
-        &self,
-        cx: &mut Cx,
-        prev: &Self,
-        id: &mut Id,
-        ((id0, state0), (id1, state1)): &mut Self::State,
-        element: &mut Self::Element,
-    ) -> ChangeFlags {
-        cx.with_id(*id, |cx| {
-            self.0.rebuild(
-                cx,
-                &prev.0,
-                id0,
-                state0,
-                (*element.tweenables[0])
-                    .as_any_mut()
-                    .downcast_mut()
-                    .unwrap(),
-            ) | self.1.rebuild(
-                cx,
-                &prev.1,
-                id1,
-                state1,
-                (*element.tweenables[1])
-                    .as_any_mut()
-                    .downcast_mut()
-                    .unwrap(),
-            )
-        })
-    }
+            fn rebuild(
+                &self,
+                cx: &mut Cx,
+                prev: &Self,
+                id: &mut Id,
+                state: &mut Self::State,
+                element: &mut Self::Element,
+            ) -> ChangeFlags {
+                cx.with_id(*id, |cx| {
+                    $(self.$i.rebuild(
+                        cx,
+                        &prev.$i,
+                        &mut state.$i.0,
+                        &mut state.$i.1,
+                        (*element.tweenables[$i])
+                            .as_any_mut()
+                            .downcast_mut()
+                            .unwrap(),
+                    )) | *
+                })
+            }
 
-    fn message(
-        &self,
-        id_path: &[Id],
-        ((id0, state0), (id1, state1)): &mut Self::State,
-        message: Box<dyn std::any::Any>,
-    ) -> MessageResult<()> {
-        match id_path {
-            [id, rest_path @ ..] if id == id0 => self.0.message(rest_path, state0, message),
-            [id, rest_path @ ..] if id == id1 => self.1.message(rest_path, state1, message),
-            [..] => MessageResult::Stale(message),
+            fn message(
+                &self,
+                id_path: &[Id],
+                state: &mut Self::State,
+                message: Box<dyn std::any::Any>,
+            ) -> MessageResult<()> {
+                match id_path {
+                    $([id, rest_path @ ..] if *id == state.$i.0 => self.$i.message(rest_path, &mut state.$i.1, message),)*
+                    [..] => MessageResult::Stale(message),
+                }
+            }
         }
-    }
+    };
 }
+
+impl_tweenable_for_tuple!(T0; 0);
+impl_tweenable_for_tuple!(T0, T1; 0, 1);
+impl_tweenable_for_tuple!(T0, T1, T2; 0, 1, 2);
+impl_tweenable_for_tuple!(T0, T1, T2, T3; 0, 1, 2, 3);
+impl_tweenable_for_tuple!(T0, T1, T2, T3, T4; 0, 1, 2, 3, 4);
+impl_tweenable_for_tuple!(T0, T1, T2, T3, T4, T5; 0, 1, 2, 3, 4, 5);
+impl_tweenable_for_tuple!(T0, T1, T2, T3, T4, T5, T6; 0, 1, 2, 3, 4, 5, 6);
+impl_tweenable_for_tuple!(T0, T1, T2, T3, T4, T5, T6, T7; 0, 1, 2, 3, 4, 5, 6, 7);
+impl_tweenable_for_tuple!(T0, T1, T2, T3, T4, T5, T6, T7, T8; 0, 1, 2, 3, 4, 5, 6, 7, 8);
+impl_tweenable_for_tuple!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
 
 pub struct Map<T, V, VO> {
     input: T,
