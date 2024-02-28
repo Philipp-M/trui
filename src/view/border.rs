@@ -243,32 +243,51 @@ mod tests {
 
     struct AppState;
 
-    #[test]
-    fn simple_border_test() {
-        let sut = Arc::new("some text".fg(Color::Cyan).border(()));
-        let buffer = render_view(
-            Size {
-                width: 15,
-                height: 5,
-            },
-            sut,
-            AppState,
-        );
+    #[tokio::test]
+    async fn simple_border_test() {
+        let _guard = crate::test_helper::init_tracing("simple_border_test").unwrap();
 
-        insta::assert_debug_snapshot!(buffer);
+        // console_subscriber::init();
+        let local_set = tokio::task::LocalSet::new();
+        local_set
+            .run_until(async {
+                let sut = Arc::new("some text".fg(Color::Cyan).border(()));
+                let buffer = render_view(
+                    Size {
+                        width: 15,
+                        height: 5,
+                    },
+                    sut,
+                    AppState,
+                )
+                .await;
+
+                insta::assert_debug_snapshot!(buffer);
+            })
+            .await
     }
 
-    #[test]
-    fn too_small_viewport() {
-        let sut = Arc::new("some text".fg(Color::Cyan).border(BorderKind::Straight));
-        let buffer = render_view(
-            Size {
-                width: 7,
-                height: 5,
-            },
-            sut,
-            AppState,
-        );
-        insta::assert_debug_snapshot!(buffer);
+    #[tokio::test]
+    async fn too_small_viewport() {
+        let _guard = crate::test_helper::init_tracing("too_small_viewport").unwrap();
+
+        let local_set = tokio::task::LocalSet::new();
+        local_set
+            .run_until(async {
+                tracing::debug!("too_small_viewport test");
+
+                let sut = Arc::new("some text".fg(Color::Cyan).border(BorderKind::Straight));
+                let buffer = render_view(
+                    Size {
+                        width: 7,
+                        height: 5,
+                    },
+                    sut,
+                    AppState,
+                )
+                .await;
+                insta::assert_debug_snapshot!(buffer);
+            })
+            .await
     }
 }

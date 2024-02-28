@@ -1,6 +1,8 @@
 #[cfg(not(any(test, doctest, feature = "doctests")))]
 use std::io::{stdout, Write};
 
+use futures::StreamExt;
+
 use crate::{
     geometry::{Point, Size},
     view::{Cx, View},
@@ -23,7 +25,7 @@ use crossterm::{
     },
 };
 
-use crossterm::event::{poll, read, Event as CxEvent, KeyCode, KeyEvent};
+use crossterm::event::{Event as CxEvent, KeyCode, KeyEvent};
 
 use std::{
     collections::HashSet,
@@ -134,9 +136,9 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         // It's a sync_channel because sender needs to be sync to work in an async
         // context. Consider crossbeam and flume channels as alternatives.
         let message_tx_clone = message_tx.clone();
-        let (wake_tx, wake_rx) = std::sync::mpsc::sync_channel(10);
-        config.runtime_handle().spawn(async move {
-            while let Ok(id_path) = wake_rx.recv() {
+        let (wake_tx, mut wake_rx) = tokio::sync::mpsc::channel(10);
+        tokio::task::spawn(async move {
+            while let Some(id_path) = wake_rx.recv().await {
                 let _ = message_tx_clone.send(AppMessage::Wake(id_path)).await;
             }
         });
@@ -147,7 +149,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
         let event_tx_clone = event_tx.clone();
 
         // Until we have a solid way to sync with the screen refresh rate, do an update every 1/60 secs when it is requested
-        config.runtime_handle().spawn(async move {
+        tokio::task::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs_f64(1.0 / 60.0));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
@@ -162,30 +164,30 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
 
         // spawn io event proxy task
         let event_tx_clone = event_tx.clone();
-        config.runtime_handle().spawn(async move {
-            loop {
-                if let Ok(true) = poll(Duration::from_millis(100)) {
-                    let event = match read() {
-                        // TODO quit app at least for now, until proper key handling is implemented, then this thread might need a signal to quit itself
-                        Ok(CxEvent::Key(KeyEvent {
-                            code: KeyCode::Esc, ..
-                        })) => Event::Quit,
-                        Ok(CxEvent::Key(key_event)) => Event::Key(key_event),
-                        Ok(CxEvent::Mouse(mouse_event)) => Event::Mouse(mouse_event.into()),
-                        Ok(CxEvent::FocusGained) => Event::FocusGained,
-                        Ok(CxEvent::FocusLost) => Event::FocusLost,
-                        // CxEvent::Paste(_) => todo!(),
-                        Ok(CxEvent::Resize(width, height)) => Event::Resize { width, height },
-                        _ => continue, // TODO handle other kinds of events and errors
-                    };
+        tokio::task::spawn(async move {
+            // let mut interval = tokio::time::interval(Duration::from_millis(100));
+            let mut reader = crossterm::event::EventStream::new();
+            while let Some(event) = reader.next().await {
+                let event = match event {
+                    // TODO quit app at least for now, until proper key handling is implemented, then this thread might need a signal to quit itself
+                    Ok(CxEvent::Key(KeyEvent {
+                        code: KeyCode::Esc, ..
+                    })) => Event::Quit,
+                    Ok(CxEvent::Key(key_event)) => Event::Key(key_event),
+                    Ok(CxEvent::Mouse(mouse_event)) => Event::Mouse(mouse_event.into()),
+                    Ok(CxEvent::FocusGained) => Event::FocusGained,
+                    Ok(CxEvent::FocusLost) => Event::FocusLost,
+                    // CxEvent::Paste(_) => todo!(),
+                    Ok(CxEvent::Resize(width, height)) => Event::Resize { width, height },
+                    _ => continue, // TODO handle other kinds of events and errors
+                };
 
-                    let quit = matches!(event, Event::Quit);
+                let quit = matches!(event, Event::Quit);
 
-                    let _ = event_tx_clone.send(event).await;
+                let _ = event_tx_clone.send(event).await;
 
-                    if quit {
-                        break;
-                    }
+                if quit {
+                    break;
                 }
             }
         });
@@ -195,7 +197,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
 
         let event_tx_clone = event_tx.clone();
         // spawn app task
-        config.runtime_handle().spawn(async move {
+        tokio::task::spawn(async move {
             let mut app_task = AppTask {
                 req_chan: message_rx,
                 response_chan: response_tx,
@@ -211,7 +213,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             app_task.run().await;
         });
 
-        let cx = Cx::new(&wake_tx, config.runtime_handle());
+        let cx = Cx::new(wake_tx, config.runtime_handle());
 
         App {
             config,
