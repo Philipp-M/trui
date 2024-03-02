@@ -2,7 +2,6 @@ use super::{BoxConstraints, Event, LifeCycle};
 use crate::geometry::{Point, Rect, Size};
 use bitflags::bitflags;
 use crossterm::event::MouseEventKind;
-use ratatui::Terminal;
 use std::{any::Any, ops::DerefMut, time::Duration};
 use xilem_core::{message, Id};
 
@@ -16,6 +15,76 @@ use ratatui::backend::CrosstermBackend;
 use std::io::Stdout;
 
 message!(Send);
+
+// TODO this should slowly be extended and possibly replace ratatui::buffer::Buffer at some time entirely for more control
+pub struct Canvas<'a> {
+    /// This assumes an area of the contained buffer starting with x: 0, y: 0
+    /// This *could* be extended to include the area as well, but I think abstraction and possibly moving away completely from ratatui::buffer::Buffer is more future-proof
+    pub(crate) buffer: &'a mut ratatui::buffer::Buffer,
+    /// x0 and y0 should never be negative currently!
+    pub viewport: kurbo::Rect,
+}
+
+impl<'a> Canvas<'a> {
+    pub fn new(buffer: &'a mut ratatui::buffer::Buffer) -> Self {
+        assert!((buffer.area.x, buffer.area.y) == (0, 0));
+        Self {
+            viewport: kurbo::Rect::new(
+                0.0,
+                0.0,
+                buffer.area.width as f64,
+                buffer.area.height as f64,
+            ),
+            buffer,
+        }
+    }
+
+    pub fn resize(&mut self, size: impl Into<kurbo::Size>) {
+        let size = size.into().round();
+        let rect = ratatui::layout::Rect::new(0, 0, size.width as u16, size.width as u16);
+        self.buffer.resize(rect);
+    }
+
+    /// This currently panics, when position is outside the containing buffer
+    /// TODO return Option instead?
+    pub(crate) fn get_mut(
+        &mut self,
+        position: impl Into<kurbo::Point>,
+    ) -> &mut ratatui::buffer::Cell {
+        let mut position = position.into();
+        position.x += self.viewport.x0;
+        position.y += self.viewport.y0;
+        // tracing::info!("position: {position:?}, viewport: {:?}", self.viewport);
+        self.buffer
+            .get_mut(position.x.round() as u16, position.y.round() as u16)
+    }
+
+    /// This currently panics, when position is outside the containing buffer
+    /// TODO return Option instead?
+    pub(crate) fn get(&self, position: impl Into<kurbo::Point>) -> &ratatui::buffer::Cell {
+        let mut position = position.into();
+        position.x += self.viewport.x0;
+        position.y += self.viewport.y0;
+        self.buffer
+            .get(position.x.round() as u16, position.y.round() as u16)
+    }
+
+    pub fn blit_with_offset(&mut self, to_blit: &Canvas, offset: impl Into<kurbo::Vec2>) {
+        let offset = offset.into();
+        let viewport_offset = self.viewport.origin().to_vec2();
+        let intersection = (self
+            .viewport
+            .intersect(to_blit.viewport + offset + viewport_offset)
+            - viewport_offset)
+            .round();
+        for y in (intersection.y0 as usize)..(intersection.y1 as usize) {
+            for x in (intersection.x0 as usize)..(intersection.x1 as usize) {
+                let pos = kurbo::Point::new(x as f64, y as f64);
+                *self.get_mut(pos) = to_blit.get(pos - offset).clone();
+            }
+        }
+    }
+}
 
 /// Static state that is shared between most contexts.
 pub struct CxState<'a> {
@@ -54,19 +123,26 @@ pub struct LayoutCx<'a, 'b> {
     pub(crate) widget_state: &'a mut WidgetState,
 }
 
-pub struct PaintCx<'a, 'b> {
+pub struct PaintCx<'a, 'b, 'c> {
     pub(crate) cx_state: &'a mut CxState<'b>,
     // TODO mutable? (xilem doesn't do this, but I think there are use cases for this...)
     pub(crate) widget_state: &'a mut WidgetState,
 
-    #[cfg(any(test, doctest, feature = "doctests"))]
-    pub(crate) terminal: &'a mut Terminal<TestBackend>,
+    pub(crate) canvas: &'a mut Canvas<'c>,
 
-    #[cfg(not(any(test, doctest, feature = "doctests")))]
-    pub(crate) terminal: &'a mut Terminal<CrosstermBackend<Stdout>>,
     // TODO this kinda feels hacky, find a better solution for this issue:
     // this is currently necessary because the most outer styleable widget should be able to override the style for a styleable widget
     pub(crate) override_style: ratatui::style::Style,
+}
+
+impl PaintCx<'_, '_, '_> {
+    pub fn buffer_at_mut(
+        &mut self,
+        position: impl Into<kurbo::Point>,
+    ) -> &mut ratatui::buffer::Cell {
+        let position = self.widget_state.origin + position.into().to_vec2();
+        self.canvas.get_mut(position)
+    }
 }
 
 /// A macro for implementing methods on multiple contexts.
@@ -90,7 +166,7 @@ macro_rules! impl_context_method {
 impl_context_method!(
     EventCx<'_, '_>,
     LayoutCx<'_, '_>,
-    PaintCx<'_, '_>,
+    PaintCx<'_, '_, '_>,
     LifeCycleCx<'_, '_>,
     {
         /// Returns whether this widget is hot.
@@ -102,10 +178,15 @@ impl_context_method!(
             self.widget_state.flags.contains(PodFlags::IS_HOT)
         }
 
-        // TODO do this differently?
-        /// absolute positioned Rect
-        pub fn rect(&self) -> Rect {
-            self.widget_state.rect()
+        /// Size of this Widget
+        pub fn size(&self) -> Size {
+            self.widget_state.size
+        }
+
+        /// TODO possibly different name, since we're in a terminal context not in a window
+        /// origin relative to the top left position of the terminal
+        pub fn window_origin(&self) -> Point {
+           self.widget_state.window_origin()
         }
 
         /// Returns whether this widget is active.
@@ -299,15 +380,8 @@ impl WidgetState {
         self.flags |= child_state.flags.upwards();
     }
 
-    pub(crate) fn window_origin(&self) -> Point {
+    pub fn window_origin(&self) -> Point {
         self.parent_window_origin + self.origin.to_vec2()
-    }
-
-    // TODO do this differently?
-    /// absolute positioned Rect
-    pub(crate) fn rect(&self) -> Rect {
-        let origin = self.window_origin();
-        Rect::new(origin.x, origin.y, self.size.width, self.size.height)
     }
 }
 
@@ -406,13 +480,17 @@ impl Pod {
     }
 
     pub fn paint(&mut self, cx: &mut PaintCx) {
+        let parent_viewport = cx.canvas.viewport;
+        let origin = cx.canvas.viewport.origin() + self.state.origin.to_vec2();
+        cx.canvas.viewport = kurbo::Rect::from_origin_size(origin, self.size());
         let inner_cx = &mut PaintCx {
             cx_state: cx.cx_state,
             widget_state: &mut self.state,
-            terminal: cx.terminal,
+            canvas: cx.canvas,
             override_style: cx.override_style,
         };
         self.widget.paint(inner_cx);
+        cx.canvas.viewport = parent_viewport;
 
         self.state.flags.remove(PodFlags::REQUEST_PAINT);
     }

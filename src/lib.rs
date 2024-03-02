@@ -7,7 +7,7 @@ mod widget;
 pub use app::App;
 pub use ratatui::style::{Color, Modifier, Style};
 pub use view::*;
-pub use widget::{CatchMouseButton, ChangeFlags};
+pub use widget::{Canvas, CatchMouseButton, ChangeFlags};
 
 #[cfg(test)]
 mod test_helper;
