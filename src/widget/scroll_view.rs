@@ -37,7 +37,7 @@ impl Widget for ScrollView {
         // TODO: scroll wheel + click-drag on scroll bars
         let child_event = if let Event::Mouse(mouse_event) = event {
             let mut mouse_event = *mouse_event;
-            mouse_event.column += self.offset.round() as i16;
+            mouse_event.row += self.offset.round() as i16;
             Event::Mouse(mouse_event)
         } else {
             event.clone()
