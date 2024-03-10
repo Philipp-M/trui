@@ -7,6 +7,7 @@ use crate::{
     Animatable, Cx, Fill, View, ViewMarker,
 };
 
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FillMaxSize<V, P, T, A> {
     pub(crate) content: V,
     // TODO making this animatable would be great too
@@ -113,6 +114,7 @@ impl<T, A, P: Animatable<f64>, V: View<T, A>> View<T, A> for FillMaxSize<V, P, T
     }
 }
 
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FillMaxSizeStyle<P> {
     pub fill: Fill,
     pub percent: P,

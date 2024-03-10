@@ -6,6 +6,7 @@ use crate::{
 use std::{any::Any, marker::PhantomData};
 use xilem_core::{Id, VecSplice};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LinearLayout<T, A, VT> {
     children: VT,
     axis: Axis,

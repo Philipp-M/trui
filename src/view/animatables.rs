@@ -42,7 +42,7 @@ pub trait Animatable<V>: Send + Sync {
     ) -> MessageResult<()>; // TODO different type (AnimationMessage?)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Lerp<T, R> {
     tweenable: T,
     ratio: R,
@@ -108,7 +108,7 @@ impl<V, T: Tweenable<V>, R: Animatable<f64>> Animatable<V> for Lerp<T, R> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct LowPassIIR<AT> {
     decay: f64,
     target: AT,
@@ -463,6 +463,7 @@ impl_tweenable_for_tuple!(T0, T1, T2, T3, T4, T5, T6, T7; 0, 1, 2, 3, 4, 5, 6, 7
 impl_tweenable_for_tuple!(T0, T1, T2, T3, T4, T5, T6, T7, T8; 0, 1, 2, 3, 4, 5, 6, 7, 8);
 impl_tweenable_for_tuple!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Map<T, V, VO> {
     input: T,
     f: fn(&V) -> VO,
@@ -505,6 +506,7 @@ impl<V: Send + Sync + 'static, VO: Send + Sync + 'static, T: Tweenable<V>> Tween
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MapEase<T> {
     input: T,
     f: fn(f64) -> f64,
@@ -548,6 +550,7 @@ impl<V, T: Tweenable<V>> Tweenable<V> for MapEase<T> {
 // TODO should this also be used within other animatables directly (not just Tweenable)?
 // TODO Duration could be animated too
 /// Overrides the duration of any tweenable it composes
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WithDuration<T> {
     pub(crate) tweenable: T,
     pub(crate) duration: Duration,
