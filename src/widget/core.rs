@@ -5,15 +5,6 @@ use crossterm::event::MouseEventKind;
 use std::{any::Any, ops::DerefMut, time::Duration};
 use xilem_core::{message, Id};
 
-#[cfg(any(test, doctest, feature = "doctests"))]
-use ratatui::backend::TestBackend;
-
-#[cfg(not(any(test, doctest, feature = "doctests")))]
-use ratatui::backend::CrosstermBackend;
-
-#[cfg(not(any(test, doctest, feature = "doctests")))]
-use std::io::Stdout;
-
 message!(Send);
 
 // TODO this should slowly be extended and possibly replace ratatui::buffer::Buffer at some time entirely for more control
@@ -186,7 +177,7 @@ impl_context_method!(
         /// TODO possibly different name, since we're in a terminal context not in a window
         /// origin relative to the top left position of the terminal
         pub fn window_origin(&self) -> Point {
-           self.widget_state.window_origin()
+            self.widget_state.window_origin()
         }
 
         /// Returns whether this widget is active.

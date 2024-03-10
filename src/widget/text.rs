@@ -1,10 +1,9 @@
 use std::borrow::Cow;
 
+use kurbo::Size;
 use ratatui::style::Style;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
-
-use crate::geometry::{to_ratatui_rect, Size};
 
 use super::{core::EventCx, BoxConstraints, ChangeFlags, Event, LayoutCx, PaintCx, Widget};
 

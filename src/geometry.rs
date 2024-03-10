@@ -15,15 +15,6 @@ pub enum Axis {
     Vertical,
 }
 
-pub fn to_ratatui_rect(rect: Rect) -> ratatui::layout::Rect {
-    ratatui::layout::Rect {
-        x: rect.x0.round().clamp(0.0, u16::MAX as f64) as u16,
-        y: rect.y0.round().clamp(0.0, u16::MAX as f64) as u16,
-        width: rect.x1.round().clamp(0.0, u16::MAX as f64) as u16,
-        height: rect.y1.round().clamp(0.0, u16::MAX as f64) as u16,
-    }
-}
-
 impl Axis {
     /// Returns the orthogonal axis.
     ///
