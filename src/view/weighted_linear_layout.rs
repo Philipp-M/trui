@@ -7,6 +7,7 @@ use crate::{
 use std::{any::Any, marker::PhantomData};
 use xilem_core::{Id, MessageResult, VecSplice};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WeightedLinearLayout<T, A, VT> {
     children: VT,
     axis: Axis,
