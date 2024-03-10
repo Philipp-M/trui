@@ -12,7 +12,7 @@ mod text;
 mod use_state;
 mod weighted_linear_layout;
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, sync::Arc};
 
 use ratatui::style::{Color, Style};
 pub use xilem_core::{Id, IdPath, VecSplice};
@@ -57,6 +57,48 @@ pub trait ViewExt<T, A>: View<T, A> + Sized {
             content: self,
             position: style.position,
             amount: style.amount,
+            phantom: PhantomData,
+        }
+    }
+
+    /// Compose a view with added local state.
+    /// The local state is added within a closure additional to the app state via a tuple.
+    /// It's initialized with the first closure.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// fn with_counter<T, V: View<T> + Clickable>(view: V) -> impl View<T> {
+    ///     view.with_state(
+    ///         || 42,
+    ///         |view, local_state| {
+    ///             v_stack((
+    ///                 format!("Click the view below to increment this: {local_state}"),
+    ///                 view.on_click(|(_app_state, local_state): &mut (Handle<T>, i32)| {
+    ///                     *local_state += 1;
+    ///                 }),
+    ///             ))
+    ///         },
+    ///     )
+    /// }
+    /// ```
+    fn with_state<Vi, S, Finit, Vo, F>(
+        self,
+        init: Finit,
+        view_factory: F,
+    ) -> WithLocalState<Finit, F, Vi, Vo>
+    where
+        Vi: View<T, A>,
+        Self: Into<Arc<Vi>>,
+        S: Send,
+        Finit: Fn() -> S + Send + Sync,
+        Vo: View<(Handle<T>, S), A>,
+        F: Fn(HandleState<Vi>, &mut S) -> Vo + Send + Sync,
+    {
+        WithLocalState {
+            init,
+            view: self.into(),
+            view_factory,
             phantom: PhantomData,
         }
     }

@@ -7,6 +7,7 @@ use crate::{
     Cx, Position, View, ViewMarker,
 };
 
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Margin<V, T, A> {
     pub(crate) content: V,
     pub(crate) amount: u16,
@@ -61,6 +62,7 @@ impl<T, A, V: View<T, A>> View<T, A> for Margin<V, T, A> {
     }
 }
 
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct MarginStyle {
     pub amount: u16,
     pub position: Position,

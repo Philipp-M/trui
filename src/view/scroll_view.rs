@@ -6,6 +6,7 @@ use xilem_core::{Id, MessageResult};
 
 use super::{Cx, ViewMarker, ViewSequence};
 
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ScrollView<T, A, C> {
     child: C,
     phantom: PhantomData<fn() -> (T, A)>,

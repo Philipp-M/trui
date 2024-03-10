@@ -12,6 +12,7 @@ use crate::{widget::ChangeFlags, Cx, View, ViewMarker};
 /// This Handle is a workaround to erase the lifetime of &mut T,
 /// it can only be constructed in contexts,
 /// where it is actually safe to use (such as UseState)
+#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct Handle<T>(*mut T);
 
 impl<T> Deref for Handle<T> {
@@ -37,6 +38,7 @@ impl<T> DerefMut for Handle<T> {
 /// not rebuild). The second callback takes that state as an argument. It
 /// is not passed the app state, but since that state is `Rc`, it would be
 /// natural to clone it and capture it in a `move` closure.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct UseState<T, A, S, V, FInit, F> {
     f_init: FInit,
     f: F,
@@ -126,49 +128,7 @@ where
     UseState::new(f_init, f)
 }
 
-pub trait WithState<T, A, Vi: View<T, A>>: Into<Arc<Vi>> {
-    /// Compose a view with added local state.
-    /// The local state is added within a closure additional to the app state via a tuple.
-    /// It's initialized with the first closure.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// fn with_counter<T, V: View<T> + Clickable>(view: V) -> impl View<T> {
-    ///     view.with_state(
-    ///         || 42,
-    ///         |view, local_state| {
-    ///             v_stack((
-    ///                 format!("Click the view below to increment this: {local_state}"),
-    ///                 view.on_click(|(_app_state, local_state): &mut (Handle<T>, i32)| {
-    ///                     *local_state += 1;
-    ///                 }),
-    ///             ))
-    ///         },
-    ///     )
-    /// }
-    /// ```
-    fn with_state<
-        S: Send,
-        Finit: Fn() -> S + Send + Sync,
-        Vo: View<(Handle<T>, S), A>,
-        F: Fn(HandleState<Vi>, &mut S) -> Vo + Send + Sync,
-    >(
-        self,
-        init: Finit,
-        view_factory: F,
-    ) -> WithLocalState<Finit, F, Vi, Vo> {
-        WithLocalState {
-            init,
-            view: self.into(),
-            view_factory,
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<T, A, Vi: View<T, A>, V: Into<Arc<Vi>>> WithState<T, A, Vi> for V {}
-
+#[derive(Default, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HandleState<V>(Arc<V>);
 
 impl<V> ViewMarker for HandleState<V> {}
@@ -204,11 +164,12 @@ impl<T, A, V: View<T, A>, S> View<(Handle<T>, S), A> for HandleState<V> {
     }
 }
 
+#[derive(Default, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct WithLocalState<Finit, F, Vi, Vo> {
-    init: Finit,
-    view: Arc<Vi>,
-    view_factory: F,
-    phantom: PhantomData<fn() -> (Vi, Vo)>,
+    pub(crate) init: Finit,
+    pub(crate) view: Arc<Vi>,
+    pub(crate) view_factory: F,
+    pub(crate) phantom: PhantomData<fn() -> (Vi, Vo)>,
 }
 
 impl<Vi, Vo, Finit, F> ViewMarker for WithLocalState<Finit, F, Vi, Vo> {}
