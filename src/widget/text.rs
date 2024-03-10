@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 
+use kurbo::Size;
 use ratatui::style::Style;
+use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
-
-use crate::geometry::{to_ratatui_rect, Size};
 
 use super::{core::EventCx, BoxConstraints, ChangeFlags, Event, LayoutCx, PaintCx, Widget};
 
@@ -35,19 +35,31 @@ impl Text {
 
 impl Widget for Text {
     fn paint(&mut self, cx: &mut PaintCx) {
-        let rect = to_ratatui_rect(cx.rect());
-
         let style = self.style.patch(cx.override_style);
 
-        let term_size = cx.terminal.size().unwrap();
+        let size = cx.size();
+        let width = size.width.round() as usize;
+        let height = size.height.round() as usize;
 
-        let max_width = rect.width.min(term_size.width.saturating_sub(rect.x)) as usize;
-        if rect.height > 0 && max_width > 0 && rect.y < term_size.height {
-            // TODO cut the text off, when it is out of bounds (rect.height is not respected)
-            // likely with a custom implementation to render the text, instead of `set_stringn`
-            cx.terminal
-                .current_buffer_mut()
-                .set_stringn(rect.x, rect.y, &self.text, max_width, style);
+        for (line_num, l) in self.text.lines().enumerate() {
+            if line_num >= height {
+                break;
+            }
+            let mut line_width = 0;
+            for g in l.graphemes(true) {
+                let w = g.width();
+                if line_width + w > width {
+                    break;
+                }
+                let cell = cx.canvas.get_mut((line_width as f64, line_num as f64));
+                cell.set_symbol(g);
+                cell.set_style(style);
+                // clear all following graphemes, when the width of `g` is > 1
+                for x in (line_width + 1)..(line_width + w) {
+                    cx.canvas.get_mut((x as f64, line_num as f64)).reset();
+                }
+                line_width += w;
+            }
         }
     }
 

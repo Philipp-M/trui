@@ -2,7 +2,7 @@ use super::{
     core::LayoutCx, core::PaintCx, BoxConstraints, ChangeFlags, Event, EventCx, Pod, Widget,
 };
 use crate::{
-    geometry::{to_ratatui_rect, Point, Size},
+    geometry::{Point, Size},
     view::Borders,
     BorderKind,
 };
@@ -60,90 +60,96 @@ impl Border {
     }
 
     fn render_border(&self, cx: &mut PaintCx) {
+        use Borders as B; // unfortunately not possible to wildcard import since it's not an enum...
+
         let style = self.style.patch(cx.override_style);
         cx.override_style = Style::default();
-        let r = to_ratatui_rect(cx.rect());
+        let s = cx.size();
+        let width = s.width.round() as usize;
+        let height = s.height.round() as usize;
 
-        use Borders as B; // unfortunately not possible to wildcard import since it's not an enum...
-        if r.width == 0 || r.height == 0 {
+        if width == 0 || height == 0 {
             return;
         }
 
-        let buf = cx.terminal.current_buffer_mut();
+        let canvas = &mut cx.canvas;
 
         let mut draw = |x, y, symbol, style| {
-            if buf.area.x + x < buf.area.width && buf.area.y + y < buf.area.height {
-                buf.get_mut(x, y).set_symbol(symbol).set_style(style);
+            if x < width && y < height {
+                canvas
+                    .get_mut((x as f64, y as f64))
+                    .set_symbol(symbol)
+                    .set_style(style);
             }
         };
 
         // Voluntary extra task, find cases where a dot makes sense as well (like `TOP | LEFT`)...
-        if r.width == 1 && r.height == 1 && self.borders.intersects(B::ALL_CORNERS) {
-            draw(r.x, r.y, symbols::DOT, self.style);
+        if s.width == 1.0 && s.height == 1.0 && self.borders.intersects(B::ALL_CORNERS) {
+            draw(0, 0, symbols::DOT, self.style);
             return;
         }
 
         // borders
         if self.borders.intersects(B::HORIZONTAL) {
             let start = if self.borders.intersects(B::LEFT_WITH_CORNERS) {
-                r.x + 1
+                1
             } else {
-                r.x
+                0
             };
             let end = if self.borders.intersects(B::RIGHT_WITH_CORNERS) {
-                r.x + r.width - 1
+                width - 1
             } else {
-                r.x + r.width
+                width
             };
             if self.borders.contains(B::TOP) {
                 for x in start..end {
-                    draw(x, r.y, self.kind.symbols().horizontal, style);
+                    draw(x, 0, self.kind.symbols().horizontal, style);
                 }
             }
             if self.borders.contains(B::BOTTOM) {
                 for x in start..end {
-                    draw(x, r.y + r.height - 1, self.kind.symbols().horizontal, style);
+                    draw(x, height - 1, self.kind.symbols().horizontal, style);
                 }
             }
         }
         if self.borders.intersects(B::VERTICAL) {
             let start = if self.borders.intersects(B::TOP_WITH_CORNERS) {
-                r.y + 1
+                1
             } else {
-                r.y
+                0
             };
             let end = if self.borders.intersects(B::BOTTOM_WITH_CORNERS) {
-                r.y + r.height - 1
+                height - 1
             } else {
-                r.y + r.height
+                height
             };
             if self.borders.contains(B::LEFT) {
                 for y in start..end {
-                    draw(r.x, y, self.kind.symbols().vertical, style);
+                    draw(0, y, self.kind.symbols().vertical, style);
                 }
             }
             if self.borders.contains(B::RIGHT) {
                 for y in start..end {
-                    draw(r.x + r.width - 1, y, self.kind.symbols().vertical, style);
+                    draw(width - 1, y, self.kind.symbols().vertical, style);
                 }
             }
         }
 
         // corners
         if self.borders.contains(B::TOP_LEFT_CORNER) {
-            draw(r.x, r.y, self.kind.symbols().top_left, style);
+            draw(0, 0, self.kind.symbols().top_left, style);
         }
         if self.borders.contains(B::BOTTOM_LEFT_CORNER) {
             let symbol = self.kind.symbols().bottom_left;
-            draw(r.x, r.y + r.height - 1, symbol, style);
+            draw(0, height - 1, symbol, style);
         }
         if self.borders.contains(B::BOTTOM_RIGHT_CORNER) {
             let symbol = self.kind.symbols().bottom_right;
-            draw(r.x + r.width - 1, r.y + r.height - 1, symbol, style);
+            draw(width - 1, height - 1, symbol, style);
         }
         if self.borders.contains(B::TOP_RIGHT_CORNER) {
             let symbol = self.kind.symbols().top_right;
-            draw(r.x + r.width - 1, r.y, symbol, style);
+            draw(width - 1, 0, symbol, style);
         }
     }
 }

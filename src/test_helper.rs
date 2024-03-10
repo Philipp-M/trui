@@ -140,9 +140,7 @@ impl Widget for DebugWidget {
     fn paint(&mut self, cx: &mut crate::widget::PaintCx) {
         self.content.paint(cx);
 
-        cx.terminal.flush().unwrap();
-
-        let buffer = cx.terminal.backend().buffer().to_owned();
+        let buffer = cx.canvas.buffer.to_owned();
         self.debug_chan_tx.blocking_send(buffer).unwrap();
     }
 

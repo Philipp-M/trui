@@ -2,7 +2,7 @@ use crate::{
     geometry::{Point, Size},
     view::{Cx, View},
     widget::{
-        BoxConstraints, CxState, Event, EventCx, LayoutCx, LifeCycle, LifeCycleCx, Message,
+        BoxConstraints, Canvas, CxState, Event, EventCx, LayoutCx, LifeCycle, LifeCycleCx, Message,
         PaintCx, Pod, PodFlags, ViewContext, WidgetState,
     },
 };
@@ -342,7 +342,7 @@ impl<T: Send + 'static, V: View<T> + 'static> App<T, V> {
             let mut paint_cx = PaintCx {
                 widget_state: &mut self.root_state,
                 cx_state,
-                terminal: &mut self.terminal,
+                canvas: &mut Canvas::new(self.terminal.current_buffer_mut()),
                 override_style: ratatui::style::Style::default(),
             };
 
