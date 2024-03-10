@@ -10,7 +10,7 @@ use crate::widget::{AnyWidget, ChangeFlags, Pod, Widget};
 use xilem_core::{Id, IdPath};
 
 xilem_core::generate_view_trait!(View, Widget, Cx, ChangeFlags; (ViewMarker + Send + Sync), (Send));
-xilem_core::generate_viewsequence_trait! {ViewSequence, View, ViewMarker, Widget, Cx, ChangeFlags, Pod; (Send + Sync), (Send)}
+xilem_core::generate_viewsequence_trait! {ViewSequence, View, ViewMarker, ElementsSplice, Widget, Cx, ChangeFlags, Pod; (Send + Sync), (Send)}
 xilem_core::generate_anyview_trait! {AnyView, View, ViewMarker, Cx, ChangeFlags, AnyWidget; (Send + Sync), (Send)}
 xilem_core::generate_memoize_view! {Memoize, MemoizeState, View, ViewMarker, Cx, ChangeFlags, static_view, memoize; + Send + Sync}
 xilem_core::generate_adapt_view! {View, Cx, ChangeFlags; + Send + Sync}
@@ -69,6 +69,36 @@ impl Cx {
         let result = f(self);
         self.pop();
         (id, result)
+    }
+
+    /// Run some logic within a new Pod context and return the newly created Pod,
+    ///
+    /// This logic is usually `View::build` to wrap the returned element into a Pod.
+    pub fn with_new_pod<S, E, F>(&mut self, f: F) -> (Id, S, Pod)
+    where
+        E: Widget,
+        F: FnOnce(&mut Cx) -> (Id, S, E),
+    {
+        let (id, state, element) = f(self);
+        (id, state, Pod::new(element))
+    }
+
+    /// Run some logic within the context of a given Pod,
+    ///
+    /// This logic is usually `View::rebuild`
+    ///
+    /// # Panics
+    ///
+    /// When the element type `E` is not the same type as the inner `DomNode` of the `Pod`
+    pub fn with_pod<T, E, F>(&mut self, pod: &mut Pod, f: F) -> T
+    where
+        E: Widget,
+        F: FnOnce(&mut E, &mut Cx) -> T,
+    {
+        let element = pod
+            .downcast_mut()
+            .expect("Element type has changed, this should never happen!");
+        f(element, self)
     }
 
     pub fn waker(&self) -> Waker {
